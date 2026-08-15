@@ -11,6 +11,7 @@ import type {
   DeviceGroup,
   KnownDevice,
   LaunchProfile,
+  JsonValue,
   Locale,
   OperationResult,
   PersistedConfig,
@@ -61,13 +62,36 @@ function stringRecord(value: unknown, name: string, booleanValues = false): Reco
   return result
 }
 
-function profile(value: unknown, name: string): LaunchProfile {
+export function validateLaunchProfile(value: unknown, name = 'profile'): LaunchProfile {
   const source = object(value, name)
   return {
     id: boundedString(source.id, `${name}.id`, 128),
     name: boundedString(source.name, `${name}.name`, 128),
-    launch: launchConfig(source.launch)
+    launch: launchConfig(source.launch),
+    extensions: source.extensions === undefined ? undefined : validateExtensions(source.extensions, `${name}.extensions`)
   }
+}
+
+function jsonValue(value: unknown, name: string, depth = 0): JsonValue {
+  if (depth > 10) throw new TypeError(`${name} is nested too deeply.`)
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (Array.isArray(value)) {
+    if (value.length > 1_000) throw new TypeError(`${name} contains too many items.`)
+    return value.map((item, index) => jsonValue(item, `${name}[${index}]`, depth + 1))
+  }
+  const source = object(value, name)
+  if (Object.keys(source).length > 1_000) throw new TypeError(`${name} contains too many fields.`)
+  return Object.fromEntries(Object.entries(source).map(([key, item]) => [
+    boundedString(key, `${name} key`, 128),
+    jsonValue(item, `${name}.${key}`, depth + 1)
+  ]))
+}
+
+export function validateExtensions(value: unknown, name = 'extensions'): Record<string, JsonValue> {
+  object(value, name)
+  if (Buffer.byteLength(JSON.stringify(value)) > 64 * 1024) throw new TypeError(`${name} exceeds the 64 KiB limit.`)
+  return jsonValue(value, name) as Record<string, JsonValue>
 }
 
 function assertUnique<T>(items: T[], value: (item: T) => string, name: string): void {
@@ -102,7 +126,8 @@ function automation(value: unknown, name: string): AutomationMacro {
 
 export function validatePersistedConfig(value: unknown): PersistedConfig {
   const source = object(value, 'config')
-  const profiles = array(source.profiles, 'config.profiles').map((item, index) => profile(item, `config.profiles[${index}]`))
+  const configLocale = locale(source.locale)
+  const profiles = array(source.profiles, 'config.profiles').map((item, index) => validateLaunchProfile(item, `config.profiles[${index}]`))
   assertUnique(profiles, (item) => item.id, 'config.profiles')
   const wirelessTargets = array(source.wirelessTargets, 'config.wirelessTargets').map((item, index) => wirelessTarget(item, `config.wirelessTargets[${index}]`))
   const automations = array(source.automations, 'config.automations').map((item, index) => automation(item, `config.automations[${index}]`))
@@ -121,7 +146,7 @@ export function validatePersistedConfig(value: unknown): PersistedConfig {
     deviceAliases: stringRecord(source.deviceAliases, 'config.deviceAliases') as Record<string, string>,
     wirelessTargets,
     automations,
-    locale: locale(source.locale),
+    locale: configLocale,
     muteNotifications: strictBoolean(source.muteNotifications, 'config.muteNotifications'),
     minimizeToTray: strictBoolean(source.minimizeToTray, 'config.minimizeToTray'),
     killAdbOnQuit: strictBoolean(source.killAdbOnQuit, 'config.killAdbOnQuit'),
@@ -159,7 +184,7 @@ function safeLegacyConfig(value: unknown, fallbackLocale: Locale): { config: Per
       return true
     })
   }
-  const profiles = dedupe(acceptItems(candidate.profiles, (item, index) => profile(item, `legacy.profiles[${index}]`)), (item) => item.id)
+  const profiles = dedupe(acceptItems(candidate.profiles, (item, index) => validateLaunchProfile(item, `legacy.profiles[${index}]`)), (item) => item.id)
   const profileIds = new Set(profiles.map((item) => item.id))
   const deviceProfiles: Record<string, string> = {}
   try {
@@ -253,8 +278,9 @@ export function validateAppConfigV3(value: unknown): AppConfigV3 {
   const runtime = object(source.runtime, 'configV3.runtime')
   const defaults = object(source.defaults, 'configV3.defaults')
   const shortcuts = object(source.shortcuts, 'configV3.shortcuts')
+  const configLocale = locale(source.locale)
   if (runtime.mode !== 'bundled' && runtime.mode !== 'custom') throw new TypeError('configV3.runtime.mode is invalid.')
-  const profiles = array(source.profiles, 'configV3.profiles').map((item, index) => profile(item, `configV3.profiles[${index}]`))
+  const profiles = array(source.profiles, 'configV3.profiles').map((item, index) => validateLaunchProfile(item, `configV3.profiles[${index}]`))
   const profileIds = new Set(profiles.map((item) => item.id))
   const knownDevices = array(source.knownDevices, 'configV3.knownDevices').map((item, index) => knownDevice(item, `configV3.knownDevices[${index}]`))
   const wirelessTargets = array(source.wirelessTargets, 'configV3.wirelessTargets').map((item, index) => wirelessTarget(item, `configV3.wirelessTargets[${index}]`))
@@ -274,7 +300,7 @@ export function validateAppConfigV3(value: unknown): AppConfigV3 {
   }
   if (groups.some((item) => item.deviceIds.some((id) => !deviceIds.has(id)))) throw new TypeError('A group references an unknown device.')
   return {
-    schemaVersion: 3, revision: integer(source.revision, 'configV3.revision'), locale: locale(source.locale),
+    schemaVersion: 3, revision: integer(source.revision, 'configV3.revision'), locale: configLocale,
     appearance: { muteNotifications: strictBoolean(appearance.muteNotifications, 'configV3.appearance.muteNotifications') },
     runtime: {
       mode: runtime.mode,

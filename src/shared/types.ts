@@ -102,11 +102,33 @@ export interface LaunchConfig {
   extraArgs: string
 }
 
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
+
 export interface LaunchProfile {
   id: string
   name: string
   launch: LaunchConfig
+  extensions?: Record<string, JsonValue>
 }
+
+export interface ProfileImportPreview {
+  token: string
+  name: string
+  scene: SceneKind
+  appVersion: string
+  minScrcpyVersion: string
+  compatible: boolean
+  warnings: string[]
+  unknownFields: string[]
+  machineLocalPaths: Array<{ field: 'recordPath' | 'recordDirectory'; value: string }>
+  conflict?: { profileId: string; name: string }
+}
+
+export type ProfileImportStrategy = 'keep' | 'replace' | 'duplicate'
+
+export type ProfileImportCommit =
+  | { profile: LaunchProfile; replacedProfileId?: string; keptExisting?: false }
+  | { keptExisting: true; replacedProfileId: string; profile?: never }
 
 export interface DeviceLaunch {
   serial: string
@@ -474,6 +496,9 @@ export interface ScrcpyApi {
   previewDiagnostics(runtime: RuntimeConfig): Promise<OperationResult<DiagnosticPreview>>
   exportDiagnostics(runtime: RuntimeConfig): Promise<OperationResult<ArtifactRecord>>
   openIssueHelper(artifactId?: string): Promise<OperationResult>
+  exportProfile(profile: LaunchProfile): Promise<OperationResult<string>>
+  previewProfileImport(runtime: RuntimeConfig): Promise<OperationResult<ProfileImportPreview>>
+  commitProfileImport(token: string, strategy: ProfileImportStrategy, keepMachinePaths: boolean): Promise<OperationResult<ProfileImportCommit>>
   setMinimizeToTray(enabled: boolean): Promise<void>
   setQuitBehavior(runtime: RuntimeConfig, killAdbOnQuit: boolean): Promise<void>
   setBossKey(enabled: boolean, accelerator: string): Promise<OperationResult<string>>

@@ -25,6 +25,8 @@ import type {
   LaunchConfig,
   LaunchProfile,
   PersistedConfig,
+  ProfileImportPreview,
+  ProfileImportStrategy,
   ScrcpySession,
   ScrcpySessionEvent,
   ScrcpyStatusEvent,
@@ -103,6 +105,10 @@ const wirelessTarget = ref(config.wirelessTargets[0]?.address || '')
 const pairTarget = ref('')
 const pairingCode = ref('')
 const profileName = ref('')
+const profileImportPreview = ref<ProfileImportPreview | null>(null)
+const profileImportStrategy = ref<ProfileImportStrategy>('duplicate')
+const keepImportedPaths = ref(false)
+const profileTransferBusy = ref(false)
 const controlSerial = ref('')
 const workspaceSection = ref<WorkspaceSection>('overview')
 const deviceOverview = ref<DeviceOverview | null>(null)
@@ -617,9 +623,33 @@ function saveProfile(): void {
     toast('error', t('profileNameRequired'))
     return
   }
+  if (name.length > 80 || profileNameExists(name)) {
+    toast('error', t('profileNameUnique'))
+    return
+  }
   config.profiles.push({ id: newId(), name, launch: launchSnapshot() })
   profileName.value = ''
   toast('success', t('profileSaved'))
+}
+
+function profileNameKey(name: string): string {
+  return name.trim().toLocaleLowerCase(config.locale)
+}
+
+function profileNameExists(name: string, excludingId = ''): boolean {
+  const key = profileNameKey(name)
+  return config.profiles.some((profile) => profile.id !== excludingId && profileNameKey(profile.name) === key)
+}
+
+function renameProfile(profile: LaunchProfile, event: Event): void {
+  const input = event.target as HTMLInputElement
+  const name = input.value.trim()
+  if (!name || name.length > 80 || profileNameExists(name, profile.id)) {
+    input.value = profile.name
+    toast('error', t('profileNameUnique'))
+    return
+  }
+  profile.name = name
 }
 
 function applyProfile(profile: LaunchProfile): void {
@@ -633,11 +663,68 @@ function updateProfile(profile: LaunchProfile): void {
 }
 
 function deleteProfile(id: string): void {
+  const references = Object.values(config.deviceProfiles).filter((profileId) => profileId === id).length
+  if (references && !window.confirm(`${references} ${t('confirmDeleteReferencedProfile')}`)) return
   const index = config.profiles.findIndex((profile) => profile.id === id)
   if (index >= 0) config.profiles.splice(index, 1)
   for (const [serial, profileId] of Object.entries(config.deviceProfiles)) {
     if (profileId === id) delete config.deviceProfiles[serial]
   }
+}
+
+async function exportProfile(profile: LaunchProfile): Promise<void> {
+  if (profileTransferBusy.value) return
+  profileTransferBusy.value = true
+  const result = await window.scrcpy.exportProfile(structuredClone(toRaw(profile)))
+  profileTransferBusy.value = false
+  if (!result.ok) {
+    if (result.error?.code !== 'PROFILE_EXPORT_CANCELED') toast('error', operationErrorMessage(result, t('profileExportFailed')))
+    return
+  }
+  toast('success', t('profileExported'))
+}
+
+async function previewProfileImport(): Promise<void> {
+  if (profileTransferBusy.value) return
+  profileTransferBusy.value = true
+  const result = await window.scrcpy.previewProfileImport(runtimeSnapshot())
+  profileTransferBusy.value = false
+  if (!result.ok) {
+    if (result.error?.code !== 'PROFILE_IMPORT_CANCELED') toast('error', operationErrorMessage(result, t('profileImportFailed')))
+    return
+  }
+  profileImportPreview.value = result.data || null
+  profileImportStrategy.value = 'duplicate'
+  keepImportedPaths.value = false
+}
+
+async function commitProfileImport(): Promise<void> {
+  if (!profileImportPreview.value || profileTransferBusy.value) return
+  profileTransferBusy.value = true
+  const result = await window.scrcpy.commitProfileImport(
+    profileImportPreview.value.token,
+    profileImportStrategy.value,
+    keepImportedPaths.value
+  )
+  profileTransferBusy.value = false
+  if (!result.ok || !result.data) {
+    toast('error', operationErrorMessage(result, t('profileImportFailed')))
+    return
+  }
+  const commit = result.data
+  if (commit.keptExisting) {
+    profileImportPreview.value = null
+    toast('info', t('profileKeptExisting'))
+    return
+  }
+  const importedProfile = commit.profile
+  const index = commit.replacedProfileId
+    ? config.profiles.findIndex((profile) => profile.id === commit.replacedProfileId)
+    : -1
+  if (index >= 0) config.profiles[index] = importedProfile
+  else config.profiles.push(importedProfile)
+  profileImportPreview.value = null
+  toast('success', t('profileImported'))
 }
 
 function assignProfile(serial: string, event: Event): void {
@@ -1144,14 +1231,34 @@ onBeforeUnmount(() => {
         </nav>
         <div class="settings-grid">
           <section v-if="activeSettingsSection === 'general'" class="panel settings-section wide profiles-section">
-            <h2>{{ t('profiles') }}</h2>
+            <div class="profile-section-heading"><h2>{{ t('profiles') }}</h2><button class="ghost compact" :disabled="profileTransferBusy" @click="previewProfileImport">{{ t('importProfile') }}</button></div>
             <p class="muted">{{ t('profilesHint') }}</p>
-            <div class="inline-form"><input v-model.trim="profileName" :placeholder="t('profileName')" /><button class="secondary" @click="saveProfile">{{ t('saveCurrentProfile') }}</button></div>
+            <div class="inline-form"><input v-model.trim="profileName" maxlength="80" :placeholder="t('profileName')" /><button class="secondary" @click="saveProfile">{{ t('saveCurrentProfile') }}</button></div>
+            <div v-if="profileImportPreview" class="profile-import-preview">
+              <div class="profile-import-title">
+                <span><strong>{{ profileImportPreview.name }}</strong><small>screen · scrcpy ≥ {{ profileImportPreview.minScrcpyVersion }} · Scrcpy GUI {{ profileImportPreview.appVersion }}</small></span>
+                <span :class="['compatibility-badge', profileImportPreview.compatible ? 'ok' : 'warn']">{{ profileImportPreview.compatible ? t('compatible') : t('newerRuntimeRequired') }}</span>
+              </div>
+              <p v-for="warning in profileImportPreview.warnings" :key="warning" class="inline-warning">{{ warning }}</p>
+              <details v-if="profileImportPreview.unknownFields.length"><summary>{{ profileImportPreview.unknownFields.length }} {{ t('unknownFields') }}</summary><code v-for="field in profileImportPreview.unknownFields" :key="field">{{ field }}</code></details>
+              <div v-if="profileImportPreview.machineLocalPaths.length" class="machine-paths">
+                <strong>{{ t('machineLocalPaths') }}</strong>
+                <code v-for="path in profileImportPreview.machineLocalPaths" :key="path.field">{{ path.field }} = {{ path.value }}</code>
+                <label class="toggle warning-toggle"><input v-model="keepImportedPaths" type="checkbox" /><span>{{ t('keepMachineLocalPaths') }}</span></label>
+              </div>
+              <div v-if="profileImportPreview.conflict" class="import-conflict">
+                <strong>{{ t('profileNameConflict') }}: {{ profileImportPreview.conflict.name }}</strong>
+                <label><input v-model="profileImportStrategy" type="radio" value="keep" />{{ t('keepExistingProfile') }}</label>
+                <label><input v-model="profileImportStrategy" type="radio" value="duplicate" />{{ t('importAsCopy') }}</label>
+                <label><input v-model="profileImportStrategy" type="radio" value="replace" />{{ t('replaceExistingProfile') }}</label>
+              </div>
+              <div class="button-row"><button class="primary" :disabled="profileTransferBusy" @click="commitProfileImport">{{ t('importProfile') }}</button><button class="ghost" @click="profileImportPreview = null">{{ t('cancel') }}</button></div>
+            </div>
             <div v-if="config.profiles.length" class="saved-list">
               <div v-for="profile in config.profiles" :key="profile.id" class="saved-row">
-                <input v-model.trim="profile.name" :aria-label="t('profileName')" />
+                <input :value="profile.name" :aria-label="t('profileName')" maxlength="80" @change="renameProfile(profile, $event)" />
                 <div class="profile-summary">{{ profile.launch.maxSize || t('automatic') }} px · {{ profile.launch.videoBitRate }} Mbps<span v-if="profile.launch.crop.width"> · {{ profile.launch.crop.width }}×{{ profile.launch.crop.height }}</span></div>
-                <div class="button-row nowrap"><button class="ghost compact" @click="applyProfile(profile)">{{ t('load') }}</button><button class="secondary compact" @click="updateProfile(profile)">{{ t('update') }}</button><button class="ghost compact" @click="deleteProfile(profile.id)">{{ t('delete') }}</button></div>
+                <div class="button-row profile-actions"><button class="ghost compact" @click="applyProfile(profile)">{{ t('load') }}</button><button class="secondary compact" @click="updateProfile(profile)">{{ t('update') }}</button><button class="ghost compact" :disabled="profileTransferBusy" @click="exportProfile(profile)">{{ t('export') }}</button><button class="ghost compact" @click="deleteProfile(profile.id)">{{ t('delete') }}</button></div>
               </div>
             </div>
           </section>
