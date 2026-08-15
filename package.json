@@ -1,6 +1,6 @@
 {
   "name": "scrcpy-gui",
-  "version": "2.0.0-beta.3",
+  "version": "2.0.0-beta.4",
   "description": "A modern, secure desktop GUI for scrcpy",
   "author": "Simon Ma <simon@tomotoes.com>",
   "homepage": "https://github.com/SimonAKing/scrcpy-gui",

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.0.0-beta.4
+
+This release establishes a secure, observable session foundation and replaces the remaining legacy application artwork.
+
 ### Added
 
 - Preview the exact validated argv generated for each selected device before launch.
