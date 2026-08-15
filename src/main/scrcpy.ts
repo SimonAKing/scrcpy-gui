@@ -87,8 +87,10 @@ export function buildScrcpyArgDetails(
   sourceLabel?: string,
   deviceWindowTitleOverride = false
 ): { args: string[]; details: CommandArgDetail[]; warnings: string[] } {
-  if (!serial.trim()) throw new Error('A device serial is required.')
-  const details: CommandArgDetail[] = [{ arg: `--serial=${serial}`, optionKey: 'serial', helpKey: 'device', source: 'session' }]
+  if (!serial.trim() && config.scene !== 'otg') throw new Error('A device serial is required.')
+  const details: CommandArgDetail[] = serial.trim()
+    ? [{ arg: `--serial=${serial.trim()}`, optionKey: 'serial', helpKey: 'device', source: 'session' }]
+    : []
   const platform = process.platform as HostPlatform
   for (const option of serializeSceneOptions(config, platform)) {
     details.push(...option.args.map((arg) => ({
@@ -120,7 +122,8 @@ export function prepareLaunchConfig(config: LaunchConfig, serial: string, now = 
   if (!config.recordDirectory.trim()) throw new Error('Choose a recording folder for automatic filenames.')
   const safeSerial = serial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
   const timestamp = now.toISOString().replaceAll(':', '-').slice(0, 19)
-  return { ...config, recordPath: join(config.recordDirectory.trim(), `scrcpy-${safeSerial}-${timestamp}.mp4`) }
+  const extension = config.recordFormat === 'default' ? 'mp4' : config.recordFormat
+  return { ...config, recordPath: join(config.recordDirectory.trim(), `scrcpy-${safeSerial}-${timestamp}.${extension}`) }
 }
 
 export function buildScrcpyArgs(config: LaunchConfig, serial: string): string[] {

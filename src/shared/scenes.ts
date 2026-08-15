@@ -140,6 +140,9 @@ export function serializeSceneOptions(
   if (config.scene === 'record-only') {
     if (!config.recordEnabled || !config.recordPath.trim()) throw new Error('Record-only scene requires a recording file.')
     if (!config.recordVideo && !config.recordAudio) throw new Error('Record-only scene must capture video, audio, or both.')
+    if (config.recordVideo && !['default', 'mp4', 'mkv'].includes(config.recordFormat)) {
+      throw new Error('Video recording requires the MP4 or MKV container.')
+    }
     add(group('scene', '--no-playback', 'recording', 'sceneRecordOnly', [
       '--no-playback', '--no-window',
       ...(!config.recordVideo ? ['--no-video'] : []),
@@ -148,6 +151,7 @@ export function serializeSceneOptions(
   }
 
   if (config.scene === 'control-only') {
+    if (config.mouseMode === 'sdk') throw new Error('Control-only mode cannot use SDK mouse without video playback; use UHID or AOA.')
     add(group('scene', '--no-video', 'controls', 'sceneControlOnly', ['--no-video', '--no-audio']))
   }
 

@@ -6,6 +6,7 @@
 
 - Model Camera, Virtual display, Record-only, Control-only, and OTG as validated launch scenes with official scrcpy 4.1 argv serialization, explicit conflicts, and portable Profile support.
 - Probe and cache each device's video/audio encoders, displays, cameras, declared sizes, high-speed frame rates, facing, and zoom range with bounded partial-failure reporting.
+- Configure all six launch scenes in a responsive guided workspace, including capability-backed Camera/Virtual display/Record-only controls, output preflight, and a separate no-ADB OTG preview/launch path.
 
 ## 2.0.0-beta.6
 

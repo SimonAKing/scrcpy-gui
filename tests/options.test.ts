@@ -111,5 +111,8 @@ describe('command provenance', () => {
     const prepared = prepareLaunchConfig(config, '192.168.1.2:5555', new Date('2026-08-15T12:34:56Z'))
     expect(prepared.recordPath).toContain('scrcpy-192.168.1.2-5555-2026-08-15T12-34-56.mp4')
     expect(buildScrcpyArgDetails(prepared, '192.168.1.2:5555').details.find((item) => item.optionKey === 'recording')?.source).toBe('generated')
+
+    config.recordFormat = 'mkv'
+    expect(prepareLaunchConfig(config, 'ABC', new Date('2026-08-15T12:34:56Z')).recordPath).toMatch(/\.mkv$/)
   })
 })

@@ -93,11 +93,14 @@ describe('scene option serialization', () => {
     control.scene = 'control-only'
     control.keyboardMode = 'uhid'
     expect(buildScrcpyArgs(control, 'CTRL-1')).toEqual(['--serial=CTRL-1', '--no-video', '--no-audio', '--keyboard=uhid'])
+    control.mouseMode = 'sdk'
+    expect(() => buildScrcpyArgs(control, 'CTRL-1')).toThrow('cannot use SDK mouse')
 
     const otg = defaultLaunchConfig()
     otg.scene = 'otg'
     otg.gamepadMode = 'aoa'
     expect(buildScrcpyArgs(otg, 'USB-1')).toEqual(['--serial=USB-1', '--otg', '--gamepad=aoa'])
+    expect(buildScrcpyArgs(otg, '')).toEqual(['--otg', '--gamepad=aoa'])
     otg.keyboardMode = 'uhid'
     expect(() => buildScrcpyArgs(otg, 'USB-1')).toThrow('OTG input modes')
   })
@@ -110,5 +113,9 @@ describe('scene conflict matrix', () => {
     expect(scenesConflict('camera', 'record-only')).toBe(false)
     expect(scenesConflict('otg', 'screen')).toBe(true)
     expect(scenesConflict('virtual-display', 'otg')).toBe(true)
+  })
+
+  it('allows an automatic USB selector only for OTG', () => {
+    expect(() => buildScrcpyArgs(defaultLaunchConfig(), '')).toThrow('device serial is required')
   })
 })
