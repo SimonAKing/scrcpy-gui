@@ -12,6 +12,8 @@
 
 > 实施进度（2026-08-15）：M1 的 OptionDescriptor、CapabilityRegistry、命令预览、SessionManager、DeviceTracker、结构化事件/错误、Sessions 页面和 Config V3 已落地；M2 的设备工作区、文件推送、APK 安装、应用列表/启动、ArtifactService、脱敏诊断包、Issue helper 和 Profile 导入导出已落地；M3 的六类场景领域模型、官方 argv 序列化、场景冲突矩阵、Profile 往返、设备级编码器/显示/相机探测、响应式场景向导、输出预检和独立无 ADB OTG 流程已落地；M4 的设备组、场景/组预设、批量预检、逐设备结果、Automation V2 编辑/导入预览/取消、并发控制、确认门槛和产物化 run report 已落地，并已通过 fake ADB、迁移、安全验证与 880/1120/1440 视口检查。[v2.4.0 Stable](https://github.com/SimonAKing/scrcpy-gui/releases/tag/v2.4.0) 已正式发布：三平台 Release workflow、包内 scrcpy/ADB 执行烟测、15 个发布资产及 14 个包的 SHA-256 清单核对均通过；随后真实发布资产的 macOS DMG、Windows NSIS 与 Ubuntu Debian 安装 → 升级 → 安装后 Renderer 启动 → 卸载工作流也全部通过。真实 Android/Camera/Virtual display/V4L2/OTG 硬件矩阵、签名/公证、人工交互式安装体验与 Chocolatey 社区审核仍是明确未验证项，必须保留在 Release notes，不能由 CI 推断为已完成。
 
+> 逐项验收状态与缺失证据见 [M0–M4 completion audit](M0_M4_COMPLETION_AUDIT.md)。
+
 ## 0. 文档目的
 
 本文不是宣传页，也不是把所有可能的功能罗列成愿望清单。它用于回答以下工程问题：
