@@ -26,4 +26,4 @@ The physical-device, signing/notarization, manual installer, and Chocolatey Comm
 
 ## Pull-request CI
 
-[PR #190](https://github.com/SimonAKing/scrcpy-gui/pull/190) passed the full validation workflow on macOS (23s), Ubuntu (27s), and Windows (59s).
+[PR #190](https://github.com/SimonAKing/scrcpy-gui/pull/190) passed the latest merged-base [validation workflow](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31898349699) on macOS (20s), Ubuntu (25s), and Windows (49s).
