@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Security
+
+- Add private vulnerability-reporting guidance and weekly/push/PR CodeQL analysis for JavaScript and TypeScript.
+- Reduce default Release workflow permissions, export a checksummed SPDX 2.3 SBOM, and generate GitHub/Sigstore build-provenance attestations for every release asset.
+
 ## 2.4.0
 
 This is the first stable release of the rebuilt Scrcpy GUI. It completes the M0–M4 software roadmap with the scrcpy 4.1 scene model, device workspace, local diagnostics, device groups, and bounded multi-device automation. See the release smoke report for the hardware, signing, and installer verification gaps that remain explicit rather than inferred.

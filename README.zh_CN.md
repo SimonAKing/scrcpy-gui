@@ -74,6 +74,8 @@ scrcpy 是 Genymobile 维护的高性能轻量工具。它可以通过 USB 或 T
 
 当前正式版构建尚未进行代码签名或公证，操作系统可能会要求你确认信任该应用。打开前请使用 Release 中的 `SHA256SUMS.txt` 校验下载文件。
 
+从 v2.4.1 起，Release 还会附带 SPDX SBOM 和 GitHub 构建来源证明。下载资产后，除核对 SHA-256 清单外，还可运行 `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` 验证其工作流来源。
+
 本次实际执行的自动检查，以及尚未验证的硬件/安装矩阵，记录在 [v2.4.0 Release smoke 报告](docs/RELEASE_SMOKE_V2.4.0.md)中。
 
 ### 使用其他 scrcpy 安装
@@ -198,6 +200,7 @@ npm run build:dir
 ## 社区与致谢
 
 - 问题、Bug 与功能建议：[GitHub Issues](https://github.com/SimonAKing/scrcpy-gui/issues)
+- 安全漏洞：请按 [SECURITY.md](SECURITY.md) 私下报告，不要提交公开 issue
 - 俄语翻译最初由 [@dEN5-tech](https://github.com/dEN5-tech) 在 [#69](https://github.com/SimonAKing/scrcpy-gui/pull/69) 中贡献，并已迁移到 2.0 界面。
 - 感谢 [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) 以及 Scrcpy GUI 的所有贡献者。
 

@@ -48,3 +48,5 @@ Every current asset was matched to its published `SHA256SUMS.txt` entry before i
 - Chocolatey Community moderation/availability until the external repository accepts the package.
 
 These gaps are release-note disclosures, not claims that the features fail. They are also not converted into support claims from fake-binary, parser, or CI packaging evidence.
+
+Supply-chain note: v2.4.0 predates repository CodeQL, Release SBOM, and GitHub artifact-attestation enforcement. Those gates apply prospectively beginning with v2.4.1; this record does not retrofit provenance onto previously built assets.
