@@ -5,7 +5,7 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   package:
@@ -68,10 +68,29 @@ jobs:
   publish:
     needs: package
     runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
     steps:
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
+      - name: Export SPDX SBOM
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p artifacts/SBOM
+          curl --fail --location --silent --show-error \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'X-GitHub-Api-Version: 2026-03-10' \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/dependency-graph/sbom" \
+            | jq '.sbom' > "artifacts/SBOM/Scrcpy.GUI-$version.sbom.spdx.json"
+          jq --exit-status '.spdxVersion == "SPDX-2.3" and (.packages | length > 0)' \
+            "artifacts/SBOM/Scrcpy.GUI-$version.sbom.spdx.json" > /dev/null
       - name: Generate SHA-256 manifest
         shell: bash
         run: |
@@ -80,6 +99,12 @@ jobs:
             | xargs -0 sha256sum \
             | awk '{ name=$2; sub(/^.*\//, "", name); print $1 "  " name }' \
             | sort -k2 > SHA256SUMS.txt
+      - name: Attest release assets
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            artifacts/**/*
+            SHA256SUMS.txt
       - uses: softprops/action-gh-release@v3
         with:
           prerelease: ${{ contains(github.ref_name, '-') }}

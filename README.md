@@ -74,6 +74,8 @@ Download the package for your platform from [GitHub Releases](https://github.com
 
 The current stable artifacts are not code-signed or notarized. Your operating system may ask you to confirm that you trust the downloaded application. Verify the download against the release `SHA256SUMS.txt` before opening it.
 
+Releases from v2.4.1 also include an SPDX SBOM and GitHub build-provenance attestations. After downloading an asset, verify its workflow identity with `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` in addition to checking the SHA-256 manifest.
+
 The exact automated checks and unverified hardware/installer matrix are recorded in the [v2.4.0 release smoke report](docs/RELEASE_SMOKE_V2.4.0.md).
 
 ### Use another scrcpy installation
@@ -198,6 +200,7 @@ The proposed product direction, functional requirements, architecture, security 
 ## Community and credits
 
 - Questions, bugs, and feature requests: [GitHub Issues](https://github.com/SimonAKing/scrcpy-gui/issues)
+- Security vulnerabilities: follow the private process in [SECURITY.md](SECURITY.md), not a public issue
 - The Russian translation was originally contributed by [@dEN5-tech](https://github.com/dEN5-tech) in [#69](https://github.com/SimonAKing/scrcpy-gui/pull/69) and migrated to the 2.0 interface.
 - Thanks to [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) and every Scrcpy GUI contributor.
 
