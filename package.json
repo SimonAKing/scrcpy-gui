@@ -9,6 +9,7 @@
     "url": "git+https://github.com/SimonAKing/scrcpy-gui.git"
   },
   "bugs": "https://github.com/SimonAKing/scrcpy-gui/issues",
+  "desktopName": "scrcpy-gui.desktop",
   "license": "GPL-3.0-only",
   "private": true,
   "main": "out/main/main.js",
@@ -20,10 +21,10 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "build": "npm run typecheck && electron-vite build",
     "build:dir": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
-    "dist:mac": "npm run build && electron-builder --mac --x64 --arm64",
-    "dist:win": "npm run build && electron-builder --win --x64",
-    "dist:linux": "npm run build && electron-builder --linux --x64"
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --x64 --arm64 --publish never",
+    "dist:win": "npm run build && electron-builder --win --x64 --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --x64 --publish never"
   },
   "dependencies": {
     "vue": "^3.5.41"
@@ -82,6 +83,7 @@
     "linux": {
       "icon": "build/icons",
       "category": "Utility",
+      "syncDesktopName": true,
       "target": [
         "AppImage",
         "deb"
