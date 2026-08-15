@@ -165,12 +165,35 @@ export interface EnvironmentStatus {
     path: string
     version: string
     error: string
+    capabilities?: CapabilitySnapshot
+    capabilityError?: string
   }
   adb: {
     ok: boolean
     path: string
     version: string
     error: string
+  }
+}
+
+export interface CapabilitySnapshot {
+  flags: string[]
+  features: {
+    screen: boolean
+    camera: boolean
+    virtualDisplay: boolean
+    recordOnly: boolean
+    controlOnly: boolean
+    otg: boolean
+    v4l2: boolean
+    appLaunch: boolean
+  }
+  probes: {
+    encoders: boolean
+    displays: boolean
+    cameras: boolean
+    cameraSizes: boolean
+    apps: boolean
   }
 }
 
