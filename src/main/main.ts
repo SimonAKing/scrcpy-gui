@@ -3,6 +3,7 @@ import { basename, extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { mkdir, stat } from 'node:fs/promises'
+import { arch, homedir, platform, release } from 'node:os'
 import type {
   AutomationStep,
   BatchProgressEvent,
@@ -57,6 +58,7 @@ import { EventStore, validateEventQuery } from './eventStore'
 import { failureFromUnknown, operationFailure } from '../shared/errors'
 import { deviceWorkspaceService, validatePackageId, validateRemoteDirectory, type SelectedLocalFile } from './deviceWorkspaceService'
 import { ArtifactService } from './artifactService'
+import { diagnosticsService, type DiagnosticContext, type PreparedDiagnostics } from './diagnosticsService'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -68,6 +70,8 @@ let quitRuntime: RuntimeConfig = { scrcpyPath: '' }
 let shutdownStarted = false
 let configRepository: ConfigRepository | undefined
 let artifactService: ArtifactService | undefined
+let diagnosticDraft: { runtimeKey: string; createdAt: number; prepared: PreparedDiagnostics } | undefined
+let lastDiagnosticScrcpyVersion = ''
 const eventStore = new EventStore()
 const rendererEntryUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
 
@@ -88,7 +92,7 @@ function assertTrustedIpcSender(event: Electron.IpcMainInvokeEvent): void {
 
 function domainForChannel(channel: string): 'runtime' | 'device' | 'session' | 'config' | 'automation' | 'artifact' {
   if (channel.includes('automation')) return 'automation'
-  if (channel.includes('screenshot') || channel.startsWith('dialog:record') || channel.startsWith('artifact:')) return 'artifact'
+  if (channel.includes('screenshot') || channel.startsWith('dialog:record') || channel.startsWith('artifact:') || channel.startsWith('diagnostics:')) return 'artifact'
   if (channel.startsWith('device:')) return 'device'
   if (channel.startsWith('session:') || channel.startsWith('scrcpy:')) return 'session'
   if (channel.startsWith('config:')) return 'config'
@@ -302,6 +306,34 @@ async function selectedFiles(paths: string[], extensions?: Set<string>): Promise
   }))
 }
 
+async function prepareDiagnostics(runtime: RuntimeConfig, allowDraft: boolean): Promise<PreparedDiagnostics> {
+  const validatedRuntime = runtimeConfig(runtime)
+  const runtimeKey = JSON.stringify(validatedRuntime)
+  if (allowDraft && diagnosticDraft?.runtimeKey === runtimeKey && Date.now() - diagnosticDraft.createdAt < 10 * 60_000) {
+    return diagnosticDraft.prepared
+  }
+  const context: DiagnosticContext = {
+    generatedAt: new Date().toISOString(),
+    appVersion: app.getVersion(),
+    electronVersion: process.versions.electron,
+    nodeVersion: process.versions.node,
+    platform: platform(),
+    release: release(),
+    arch: arch(),
+    homePath: homedir(),
+    userDataPath: app.getPath('userData'),
+    environment: await getEnvironment(validatedRuntime),
+    devices: listTrackedDevices(),
+    sessions: listScrcpySessions(),
+    events: eventStore.list({ limit: 1_000 }),
+    config: configRepository?.snapshot()
+  }
+  const prepared = diagnosticsService.prepare(context)
+  lastDiagnosticScrcpyVersion = context.environment.scrcpy.version || 'Unavailable'
+  diagnosticDraft = { runtimeKey, createdAt: Date.now(), prepared }
+  return prepared
+}
+
 function availableDeviceSerial(value: unknown): string {
   return availableDeviceSerials([value])[0]
 }
@@ -317,6 +349,81 @@ function availableDeviceSerials(value: unknown): string[] {
 handle('app:version', () => app.getVersion())
 handle('events:list', (_event, query: unknown) => eventStore.list(validateEventQuery(query)))
 handle('events:clear', () => eventStore.clear())
+handle('diagnostics:preview', async (_event, runtime: RuntimeConfig) => {
+  try {
+    return { ok: true, data: (await prepareDiagnostics(runtime, false)).preview }
+  } catch (error) {
+    return failureFromUnknown(error, 'DIAGNOSTIC_PREVIEW_FAILED', 'diagnostic-preview', 'Unable to prepare the diagnostic preview.')
+  }
+})
+handle('diagnostics:export', async (_event, runtime: RuntimeConfig) => {
+  if (!artifactService) return operationFailure('ARTIFACT_SERVICE_UNAVAILABLE', 'diagnostic-export', 'Artifact service is not ready.')
+  try {
+    const prepared = await prepareDiagnostics(runtime, true)
+    const timestamp = new Date().toISOString().replaceAll(':', '-').slice(0, 19)
+    const destination = await dialog.showSaveDialog({
+      title: 'Export redacted diagnostic bundle',
+      defaultPath: join(app.getPath('downloads'), `scrcpy-gui-diagnostics-${timestamp}.zip`),
+      filters: [{ name: 'ZIP archive', extensions: ['zip'] }]
+    })
+    if (destination.canceled || !destination.filePath) {
+      return operationFailure('DIAGNOSTIC_EXPORT_CANCELED', 'diagnostic-export', 'Diagnostic export canceled.')
+    }
+    await diagnosticsService.write(destination.filePath, prepared)
+    const artifact = await artifactService.register({
+      kind: 'diagnostic', path: destination.filePath,
+      metadata: { appVersion: app.getVersion(), eventCount: prepared.preview.eventCount, redacted: true }
+    })
+    diagnosticDraft = undefined
+    eventStore.publish({
+      level: 'info', domain: 'artifact', action: 'diagnostic-exported', stage: 'complete',
+      message: 'Redacted diagnostic bundle exported.', data: { artifactId: artifact.id, size: artifact.size }
+    })
+    return { ok: true, data: artifact }
+  } catch (error) {
+    return failureFromUnknown(error, 'DIAGNOSTIC_EXPORT_FAILED', 'diagnostic-export', 'Unable to export the diagnostic bundle.', {
+      retryable: true,
+      suggestedActions: ['Choose another writable destination and try again.']
+    })
+  }
+})
+handle('diagnostics:issue-helper', async (_event, artifactId?: string) => {
+  try {
+    let bundleName = 'Attach the exported diagnostic bundle manually after reviewing it.'
+    if (artifactId !== undefined) {
+      if (!artifactService) throw new Error('Artifact service is not ready.')
+      const artifact = await artifactService.getExisting(boundedString(artifactId, 'diagnostic artifact id', 128))
+      if (artifact.kind !== 'diagnostic') throw new TypeError('Selected artifact is not a diagnostic bundle.')
+      bundleName = `Attach \`${artifact.name}\` manually after reviewing its contents.`
+    }
+    const body = [
+      '### Environment',
+      `- Scrcpy GUI: ${app.getVersion()}`,
+      `- scrcpy: ${lastDiagnosticScrcpyVersion || 'See diagnostic bundle'}`,
+      `- OS/arch: ${platform()} ${release()} / ${arch()}`,
+      '',
+      '### Steps to reproduce',
+      '1. ',
+      '2. ',
+      '',
+      '### Expected behavior',
+      '',
+      '### Actual behavior',
+      '',
+      '### Diagnostic bundle',
+      bundleName,
+      '',
+      '> Scrcpy GUI did not upload any file or submit this issue.'
+    ].join('\n')
+    const url = new URL('https://github.com/SimonAKing/scrcpy-gui/issues/new')
+    url.searchParams.set('title', '[Bug] ')
+    url.searchParams.set('body', body)
+    await shell.openExternal(url.toString())
+    return { ok: true }
+  } catch (error) {
+    return failureFromUnknown(error, 'ISSUE_HELPER_FAILED', 'issue-helper', 'Unable to open the GitHub issue helper.')
+  }
+})
 handle('artifact:list', async (_event, query: unknown) => {
   if (!artifactService) return operationFailure('ARTIFACT_SERVICE_UNAVAILABLE', 'artifact-list', 'Artifact service is not ready.')
   try {
