@@ -1,5 +1,6 @@
 import type {
   AutomationStep,
+  CommandPreviewRequest,
   DeviceControlAction,
   DeviceLaunch,
   GamepadMode,
@@ -25,6 +26,7 @@ const keyboardModes = new Set<KeyboardMode>(['default', 'sdk', 'uhid', 'aoa'])
 const mouseModes = new Set<MouseMode>(['default', 'sdk', 'uhid', 'aoa', 'disabled'])
 const gamepadModes = new Set<GamepadMode>(['default', 'uhid', 'aoa'])
 const videoCodecs = new Set<VideoCodec>(['default', 'h264', 'h265', 'av1', 'vp8', 'vp9'])
+const previewSources = new Set<CommandPreviewRequest['source']>(['global', 'profile'])
 const controlActions = new Set<DeviceControlAction>([
   'back', 'home', 'app-switch', 'menu', 'volume-up', 'volume-down', 'power', 'screen-on', 'screen-off',
   'rotate', 'auto-rotate', 'show-touches-on', 'show-touches-off'
@@ -146,6 +148,24 @@ export function deviceLaunches(value: unknown): DeviceLaunch[] {
   return value.map((item, index) => {
     const source = record(item, `launches[${index}]`)
     return { serial: deviceSerial(source.serial), launch: launchConfig(source.launch) }
+  })
+}
+
+export function commandPreviewRequests(value: unknown): CommandPreviewRequest[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 100) {
+    throw new TypeError('preview requests must contain 1 to 100 devices.')
+  }
+  return value.map((item, index) => {
+    const source = record(item, `preview[${index}]`)
+    const previewSource = enumValue(source.source, `preview[${index}].source`, previewSources)
+    const profileName = source.profileName === undefined
+      ? undefined
+      : boundedString(source.profileName, `preview[${index}].profileName`, 128, true)
+    if (previewSource === 'profile' && !profileName) throw new TypeError(`preview[${index}].profileName is required for profile sources.`)
+    return {
+      serial: deviceSerial(source.serial), launch: launchConfig(source.launch), source: previewSource, profileName,
+      deviceWindowTitleOverride: strictBoolean(source.deviceWindowTitleOverride, `preview[${index}].deviceWindowTitleOverride`)
+    }
   })
 }
 

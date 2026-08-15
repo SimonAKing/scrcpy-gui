@@ -273,7 +273,18 @@ async function launchSelected(): Promise<void> {
 }
 
 async function previewSelected(): Promise<void> {
-  const launches = selectedSerials.value.map((serial) => ({ serial, launch: launchSnapshot(serial) }))
+  const launches = selectedSerials.value.map((serial) => {
+    const profileId = config.deviceProfiles[serial]
+    const profile = profileId ? config.profiles.find((item) => item.id === profileId) : undefined
+    const baseLaunch = profile?.launch || config.launch
+    return {
+      serial,
+      launch: launchSnapshot(serial),
+      source: profile ? 'profile' as const : 'global' as const,
+      profileName: profile?.name,
+      deviceWindowTitleOverride: Boolean(config.deviceAliases[serial]?.trim() && !baseLaunch.windowTitle.trim())
+    }
+  })
   const result = await window.scrcpy.preview(launches)
   if (!result.ok) {
     toast('error', result.error || t('commandPreviewFailed'))
@@ -288,6 +299,11 @@ function previewLabel(serial: string): string {
 
 function previewArgv(preview: CommandPreview): string {
   return JSON.stringify(['scrcpy', ...preview.args])
+}
+
+function previewSource(detail: CommandPreview['details'][number]): string {
+  if (detail.source === 'profile' && detail.sourceLabel) return `${t('sourceProfile')}: ${detail.sourceLabel}`
+  return t(`source_${detail.source}`)
 }
 
 async function stop(serial: string): Promise<void> {
@@ -679,6 +695,12 @@ onBeforeUnmount(() => {
             <article v-for="preview in commandPreviews" :key="preview.serial">
               <strong>{{ previewLabel(preview.serial) }}</strong>
               <code>{{ previewArgv(preview) }}</code>
+              <div class="command-detail-list">
+                <div v-for="(detail, index) in preview.details" :key="`${detail.arg}-${index}`">
+                  <code>{{ detail.arg }}</code><span>{{ previewSource(detail) }}</span><small>{{ t(detail.helpKey) }}</small>
+                </div>
+              </div>
+              <p v-for="warning in preview.warnings" :key="warning" class="inline-warning">{{ warning }}</p>
             </article>
           </div>
         </section>
@@ -820,7 +842,7 @@ onBeforeUnmount(() => {
 
           <section v-if="activeSettingsSection === 'advanced'" class="panel settings-section wide">
             <h2>{{ t('advanced') }}</h2>
-            <label><span>{{ t('extraArgs') }}</span><textarea v-model="config.launch.extraArgs" rows="5" placeholder="--video-buffer=50\n--power-off-on-close"></textarea><small>{{ t('extraArgsHint') }}</small></label>
+            <label><span>{{ t('extraArgs') }}</span><textarea v-model="config.launch.extraArgs" rows="5" placeholder="--power-off-on-close"></textarea><small>{{ t('extraArgsHint') }}</small></label>
             <div class="field-pair"><label><span>{{ t('pushTarget') }}</span><input v-model.trim="config.launch.pushTarget" placeholder="/sdcard/Download/" /><small>{{ t('pushTargetHint') }}</small></label><label><span>{{ t('tunnelPort') }}</span><input v-model.trim="config.launch.tunnelPort" placeholder="27183:27199" /><small>{{ t('tunnelPortHint') }}</small></label></div>
             <label class="toggle"><input v-model="config.muteNotifications" type="checkbox" /><span>{{ t('muteNotifications') }}</span></label>
             <label class="toggle"><input v-model="config.minimizeToTray" type="checkbox" /><span>{{ t('minimizeToTray') }}</span></label>

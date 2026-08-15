@@ -1,4 +1,8 @@
-import type { Device, DeviceState, LaunchConfig } from '../shared/types'
+import type { CommandArgDetail, CommandArgSource, Device, DeviceState, LaunchConfig } from '../shared/types'
+import { analyzeExpertArgs, serializeLaunchOptions, validatePortRange } from '../shared/options'
+import { join } from 'node:path'
+
+export { validatePortRange } from '../shared/options'
 
 const HOST_LABEL = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/
 
@@ -72,87 +76,42 @@ export function validateDeviceAddress(value: string, requirePort = false): boole
 }
 
 export function splitExtraArgs(value: string): string[] {
-  const args = value
-    .split(/\r?\n/)
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-
-  if (args.some((arg) => arg === '-s' || arg.startsWith('--serial'))) {
-    throw new Error('Device serial is managed by Scrcpy GUI and cannot be overridden in extra arguments.')
-  }
-  if (args.some((arg) => arg.includes('\0'))) throw new Error('Additional arguments may not contain null bytes.')
-  return args
+  return analyzeExpertArgs(value).args
 }
 
-export function validatePortRange(value: string): boolean {
-  const ports = value.trim().split(':')
-  if (ports.length < 1 || ports.length > 2 || ports.some((port) => !validPort(port))) return false
-  return ports.length === 1 || Number(ports[0]) <= Number(ports[1])
+export function buildScrcpyArgDetails(
+  config: LaunchConfig,
+  serial: string,
+  source: Extract<CommandArgSource, 'global' | 'profile'> = 'global',
+  sourceLabel?: string,
+  deviceWindowTitleOverride = false
+): { args: string[]; details: CommandArgDetail[]; warnings: string[] } {
+  if (!serial.trim()) throw new Error('A device serial is required.')
+  const details: CommandArgDetail[] = [{ arg: `--serial=${serial}`, optionKey: 'serial', helpKey: 'device', source: 'session' }]
+  for (const option of serializeLaunchOptions(config)) {
+    for (const arg of option.args) {
+      const optionSource: CommandArgSource = option.key === 'windowTitle' && deviceWindowTitleOverride
+        ? 'device-override'
+        : option.key === 'recording' && config.autoRecordName ? 'generated' : source
+      details.push({
+        arg, optionKey: option.key, helpKey: option.helpKey, source: optionSource,
+        sourceLabel: optionSource === 'profile' ? sourceLabel : undefined
+      })
+    }
+  }
+  const expert = analyzeExpertArgs(config.extraArgs)
+  details.push(...expert.args.map((arg) => ({ arg, optionKey: 'expertArgs', helpKey: 'extraArgs', source: 'expert' as const })))
+  return { args: details.map((detail) => detail.arg), details, warnings: expert.warnings }
 }
 
-function validatePair(name: string, width: number, height: number): void {
-  const hasWidth = width > 0
-  const hasHeight = height > 0
-  if (hasWidth !== hasHeight) {
-    throw new Error(`${name} width and height must either both be zero or both be greater than zero.`)
-  }
+export function prepareLaunchConfig(config: LaunchConfig, serial: string, now = new Date()): LaunchConfig {
+  if (!config.recordEnabled || !config.autoRecordName) return config
+  if (!config.recordDirectory.trim()) throw new Error('Choose a recording folder for automatic filenames.')
+  const safeSerial = serial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
+  const timestamp = now.toISOString().replaceAll(':', '-').slice(0, 19)
+  return { ...config, recordPath: join(config.recordDirectory.trim(), `scrcpy-${safeSerial}-${timestamp}.mp4`) }
 }
 
 export function buildScrcpyArgs(config: LaunchConfig, serial: string): string[] {
-  if (!serial.trim()) throw new Error('A device serial is required.')
-  validatePair('Crop', config.crop.width, config.crop.height)
-  validatePair('Window', config.window.width, config.window.height)
-  if (config.recordEnabled && !config.recordPath.trim()) {
-    throw new Error('Choose a recording file before starting scrcpy.')
-  }
-
-  const args: string[] = [`--serial=${serial}`]
-
-  if (config.windowTitle.trim()) args.push(`--window-title=${config.windowTitle.trim()}`)
-  if (config.shortcutModifier !== 'default') args.push(`--shortcut-mod=${config.shortcutModifier}`)
-  if (config.keyboardMode !== 'default') args.push(`--keyboard=${config.keyboardMode}`)
-  if (config.mouseMode !== 'default') args.push(`--mouse=${config.mouseMode}`)
-  if (config.gamepadMode !== 'default') args.push(`--gamepad=${config.gamepadMode}`)
-  if (config.videoCodec !== 'default') args.push(`--video-codec=${config.videoCodec}`)
-  if (config.videoBitRate > 0 && config.videoBitRate !== 8) args.push(`--video-bit-rate=${config.videoBitRate}M`)
-  if (config.videoBuffer > 0) args.push(`--video-buffer=${Math.trunc(config.videoBuffer)}`)
-  if (config.audioBuffer > 0) args.push(`--audio-buffer=${Math.trunc(config.audioBuffer)}`)
-  if (config.maxSize > 0) args.push(`--max-size=${Math.trunc(config.maxSize)}`)
-  if (config.maxFps > 0) args.push(`--max-fps=${Math.trunc(config.maxFps)}`)
-  if (config.displayId > 0) args.push(`--display-id=${Math.trunc(config.displayId)}`)
-  if (config.orientation !== '0') args.push(`--orientation=${config.orientation}`)
-
-  if (config.recordEnabled) {
-    args.push(`--record=${config.recordPath.trim()}`)
-    if (config.noPlayback) args.push('--no-playback', '--no-window')
-  }
-  if (config.alwaysOnTop) args.push('--always-on-top')
-  if (!config.control) args.push('--no-control')
-  if (!config.audio) args.push('--no-audio')
-  if (config.turnScreenOff) args.push('--turn-screen-off')
-  if (config.stayAwake) args.push('--stay-awake')
-  if (config.showTouches) args.push('--show-touches')
-  if (config.fullscreen) args.push('--fullscreen')
-  if (config.borderless) args.push('--window-borderless')
-  if (!config.windowAspectRatioLock) args.push('--no-window-aspect-ratio-lock')
-  if (config.pushTarget.trim()) {
-    if (config.pushTarget.includes('\0')) throw new Error('Push target may not contain null bytes.')
-    args.push(`--push-target=${config.pushTarget.trim()}`)
-  }
-  if (config.tunnelPort.trim()) {
-    if (!validatePortRange(config.tunnelPort)) throw new Error('Tunnel port must be a port or ascending port range from 1 to 65535.')
-    args.push(`--port=${config.tunnelPort.trim()}`)
-  }
-
-  if (config.crop.width > 0) {
-    args.push(`--crop=${Math.trunc(config.crop.width)}:${Math.trunc(config.crop.height)}:${Math.trunc(config.crop.x)}:${Math.trunc(config.crop.y)}`)
-  }
-  if (config.window.x !== 0) args.push(`--window-x=${Math.trunc(config.window.x)}`)
-  if (config.window.y !== 0) args.push(`--window-y=${Math.trunc(config.window.y)}`)
-  if (config.window.width > 0) {
-    args.push(`--window-width=${Math.trunc(config.window.width)}`)
-    args.push(`--window-height=${Math.trunc(config.window.height)}`)
-  }
-
-  return [...args, ...splitExtraArgs(config.extraArgs)]
+  return buildScrcpyArgDetails(config, serial).args
 }

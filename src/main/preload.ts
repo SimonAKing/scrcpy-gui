@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AutomationStep,
+  CommandPreviewRequest,
   DeviceControlAction,
   DeviceLaunch,
   DeviceTrackerEvent,
@@ -28,7 +29,7 @@ const api: ScrcpyApi = {
   disconnect: (runtime: RuntimeConfig, target: string) => ipcRenderer.invoke('device:disconnect', runtime, target),
   start: (runtime: RuntimeConfig, launches: DeviceLaunch[]) =>
     ipcRenderer.invoke('scrcpy:start', runtime, launches),
-  preview: (launches: DeviceLaunch[]) => ipcRenderer.invoke('scrcpy:preview', launches),
+  preview: (launches: CommandPreviewRequest[]) => ipcRenderer.invoke('scrcpy:preview', launches),
   listSessions: () => ipcRenderer.invoke('session:list'),
   stopSession: (id: string) => ipcRenderer.invoke('session:stop', id),
   stop: (serial: string) => ipcRenderer.invoke('scrcpy:stop', serial),

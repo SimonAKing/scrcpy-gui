@@ -1,15 +1,20 @@
 import type { AppConfigV3, LaunchConfig, Locale, PersistedConfig } from './types'
+import { optionDefault } from './options'
 
 export function defaultLaunchConfig(): LaunchConfig {
   return {
-    windowTitle: '', videoBitRate: 8, videoBuffer: 0, audioBuffer: 0, maxSize: 0, maxFps: 0, displayId: 0,
-    orientation: '0', videoCodec: 'default',
-    shortcutModifier: 'default', keyboardMode: 'default', mouseMode: 'default', gamepadMode: 'default',
-    alwaysOnTop: false, control: true, audio: true,
-    turnScreenOff: false, stayAwake: false, showTouches: false, fullscreen: false, borderless: false,
-    windowAspectRatioLock: true, pushTarget: '', tunnelPort: '',
-    recordEnabled: false, recordPath: '', autoRecordName: false, recordDirectory: '', noPlayback: false,
-    crop: { x: 0, y: 0, width: 0, height: 0 }, window: { x: 0, y: 0, width: 0, height: 0 }, extraArgs: ''
+    windowTitle: optionDefault('windowTitle'), videoBitRate: optionDefault('videoBitRate'),
+    videoBuffer: optionDefault('videoBuffer'), audioBuffer: optionDefault('audioBuffer'), maxSize: optionDefault('maxSize'),
+    maxFps: optionDefault('maxFps'), displayId: optionDefault('displayId'), orientation: optionDefault('orientation'),
+    videoCodec: optionDefault('videoCodec'), shortcutModifier: optionDefault('shortcutModifier'),
+    keyboardMode: optionDefault('keyboardMode'), mouseMode: optionDefault('mouseMode'), gamepadMode: optionDefault('gamepadMode'),
+    alwaysOnTop: optionDefault('alwaysOnTop'), control: optionDefault('control'), audio: optionDefault('audio'),
+    turnScreenOff: optionDefault('turnScreenOff'), stayAwake: optionDefault('stayAwake'), showTouches: optionDefault('showTouches'),
+    fullscreen: optionDefault('fullscreen'), borderless: optionDefault('borderless'),
+    windowAspectRatioLock: optionDefault('windowAspectRatioLock'), pushTarget: optionDefault('pushTarget'),
+    tunnelPort: optionDefault('tunnelPort'), recordEnabled: optionDefault('recording'), recordPath: '',
+    autoRecordName: false, recordDirectory: '', noPlayback: false, crop: optionDefault('crop'),
+    window: { ...optionDefault<object>('windowPosition'), ...optionDefault<object>('windowSize') } as LaunchConfig['window'], extraArgs: ''
   }
 }
 

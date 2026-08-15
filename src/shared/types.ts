@@ -90,9 +90,27 @@ export interface DeviceLaunch {
   launch: LaunchConfig
 }
 
+export interface CommandPreviewRequest extends DeviceLaunch {
+  source: 'global' | 'profile'
+  profileName?: string
+  deviceWindowTitleOverride: boolean
+}
+
+export type CommandArgSource = 'session' | 'global' | 'profile' | 'device-override' | 'generated' | 'expert'
+
+export interface CommandArgDetail {
+  arg: string
+  optionKey: string
+  helpKey: string
+  source: CommandArgSource
+  sourceLabel?: string
+}
+
 export interface CommandPreview {
   serial: string
   args: string[]
+  details: CommandArgDetail[]
+  warnings: string[]
 }
 
 export type SceneKind = 'screen'
@@ -306,7 +324,7 @@ export interface ScrcpyApi {
   pair(runtime: RuntimeConfig, target: string, code: string): Promise<OperationResult<string>>
   disconnect(runtime: RuntimeConfig, target: string): Promise<OperationResult<string>>
   start(runtime: RuntimeConfig, launches: DeviceLaunch[]): Promise<OperationResult<string[]>>
-  preview(launches: DeviceLaunch[]): Promise<OperationResult<CommandPreview[]>>
+  preview(launches: CommandPreviewRequest[]): Promise<OperationResult<CommandPreview[]>>
   listSessions(): Promise<ScrcpySession[]>
   stopSession(id: string): Promise<OperationResult>
   stop(serial: string): Promise<OperationResult>

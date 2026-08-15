@@ -36,6 +36,7 @@ import {
 import {
   automationSteps,
   boundedString,
+  commandPreviewRequests,
   controlAction,
   deviceLaunches,
   deviceSerial,
@@ -44,7 +45,7 @@ import {
   strictBoolean
 } from './ipcValidation'
 import { isTrustedRendererUrl, PRODUCTION_CSP } from './security'
-import { buildScrcpyArgs } from './scrcpy'
+import { buildScrcpyArgDetails, prepareLaunchConfig } from './scrcpy'
 import { ConfigRepository } from './configRepository'
 
 let mainWindow: BrowserWindow | null = null
@@ -274,11 +275,17 @@ handle(
   (_event, runtime: RuntimeConfig, launches: DeviceLaunch[]) =>
     startScrcpy(runtimeConfig(runtime), deviceLaunches(launches))
 )
-handle('scrcpy:preview', (_event, launches: DeviceLaunch[]) => {
+handle('scrcpy:preview', (_event, launches: unknown) => {
   try {
     return {
       ok: true,
-      data: deviceLaunches(launches).map(({ serial, launch }) => ({ serial, args: buildScrcpyArgs(launch, serial) }))
+      data: commandPreviewRequests(launches).map((request) => {
+        const prepared = prepareLaunchConfig(request.launch, request.serial)
+        return {
+          serial: request.serial,
+          ...buildScrcpyArgDetails(prepared, request.serial, request.source, request.profileName, request.deviceWindowTitleOverride)
+        }
+      })
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }

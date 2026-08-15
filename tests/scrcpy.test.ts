@@ -222,10 +222,7 @@ describe('validatePortRange', () => {
 
 describe('splitExtraArgs', () => {
   it('passes one safe argument per line', () => {
-    expect(splitExtraArgs(' --video-buffer=50 \n\n--power-off-on-close')).toEqual([
-      '--video-buffer=50',
-      '--power-off-on-close'
-    ])
+    expect(splitExtraArgs(' --power-off-on-close \n\n--time-limit=30')).toEqual(['--power-off-on-close', '--time-limit=30'])
   })
 
   it('prevents callers from overriding the selected device', () => {
