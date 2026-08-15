@@ -20,6 +20,7 @@ const api: ScrcpyApi = {
   disconnect: (runtime: RuntimeConfig, target: string) => ipcRenderer.invoke('device:disconnect', runtime, target),
   start: (runtime: RuntimeConfig, launches: DeviceLaunch[]) =>
     ipcRenderer.invoke('scrcpy:start', runtime, launches),
+  preview: (launches: DeviceLaunch[]) => ipcRenderer.invoke('scrcpy:preview', launches),
   stop: (serial: string) => ipcRenderer.invoke('scrcpy:stop', serial),
   control: (runtime: RuntimeConfig, serial: string, action: DeviceControlAction) =>
     ipcRenderer.invoke('device:control', runtime, serial, action),

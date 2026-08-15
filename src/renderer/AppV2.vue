@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, toRaw, watch } fro
 import type {
   AutomationMacro,
   AutomationStep,
+  CommandPreview,
   Device,
   DeviceControlAction,
   EnvironmentStatus,
@@ -126,6 +127,7 @@ const version = ref('2.0.0')
 const environment = ref<EnvironmentStatus | null>(null)
 const devices = ref<Device[]>([])
 const selectedSerials = ref<string[]>([])
+const commandPreviews = ref<CommandPreview[]>([])
 const runningSerials = ref(new Set<string>())
 const loadingEnvironment = ref(false)
 const loadingDevices = ref(false)
@@ -174,6 +176,12 @@ const launchSnapshot = (serial?: string): LaunchConfig => {
 watch(
   config,
   (value) => localStorage.setItem(STORAGE_KEY, JSON.stringify(value)),
+  { deep: true }
+)
+
+watch(
+  [selectedSerials, () => config.launch, () => config.profiles, () => config.deviceProfiles, () => config.deviceAliases],
+  () => { commandPreviews.value = [] },
   { deep: true }
 )
 
@@ -260,6 +268,24 @@ async function launchSelected(): Promise<void> {
   const launches = selectedSerials.value.map((serial) => ({ serial, launch: launchSnapshot(serial) }))
   const result = await window.scrcpy.start(runtimeSnapshot(), launches)
   if (!result.ok) toast('error', result.error || t('operationFailed'))
+}
+
+async function previewSelected(): Promise<void> {
+  const launches = selectedSerials.value.map((serial) => ({ serial, launch: launchSnapshot(serial) }))
+  const result = await window.scrcpy.preview(launches)
+  if (!result.ok) {
+    toast('error', result.error || t('commandPreviewFailed'))
+    return
+  }
+  commandPreviews.value = result.data || []
+}
+
+function previewLabel(serial: string): string {
+  return config.deviceAliases[serial]?.trim() || devices.value.find((device) => device.serial === serial)?.model || serial
+}
+
+function previewArgv(preview: CommandPreview): string {
+  return JSON.stringify(['scrcpy', ...preview.args])
 }
 
 async function stop(serial: string): Promise<void> {
@@ -548,6 +574,7 @@ onBeforeUnmount(() => {
           <div class="button-row">
             <button class="ghost" :disabled="loadingDevices" @click="refreshDevices(true)">{{ t('refresh') }}</button>
             <button class="ghost" :disabled="!usableDevices.length" @click="toggleSelectAll">{{ t('selectAll') }}</button>
+            <button class="ghost" :disabled="!selectedSerials.length" @click="previewSelected">{{ t('previewCommand') }}</button>
             <button class="primary" :disabled="!selectedSerials.length || !environment?.scrcpy.ok" @click="launchSelected">{{ t('launchSelected') }}</button>
           </div>
         </section>
@@ -575,6 +602,19 @@ onBeforeUnmount(() => {
           </article>
         </section>
         <section v-else class="empty-state"><span class="empty-icon">⌁</span><p>{{ t('noDevices') }}</p></section>
+
+        <section v-if="commandPreviews.length" class="panel command-preview">
+          <div class="panel-title">
+            <div><p class="eyebrow">{{ t('commandPreview') }}</p><p class="muted">{{ t('commandPreviewHint') }}</p></div>
+            <button class="ghost compact" @click="commandPreviews = []">{{ t('close') }}</button>
+          </div>
+          <div class="command-preview-list">
+            <article v-for="preview in commandPreviews" :key="preview.serial">
+              <strong>{{ previewLabel(preview.serial) }}</strong>
+              <code>{{ previewArgv(preview) }}</code>
+            </article>
+          </div>
+        </section>
 
         <section v-if="usableDevices.length" class="panel control-panel">
           <div class="panel-title">
