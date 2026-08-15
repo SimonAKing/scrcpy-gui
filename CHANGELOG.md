@@ -13,6 +13,12 @@ This licensing and verification-tooling patch release applies the MIT License pr
 - Remove an unused legacy tray icon that was the only remaining current-tree artifact from an otherwise removed external contribution.
 - Add published installer lifecycle/startup verification, tagged beta migration fixtures, and a redacted physical-device preflight/runbook without claiming missing hardware results.
 
+### Security
+
+- Add private vulnerability-reporting guidance and weekly/push/PR CodeQL analysis for JavaScript and TypeScript.
+- Reduce default Release workflow permissions, export a checksummed SPDX 2.3 SBOM, and generate GitHub/Sigstore build-provenance attestations for every release asset.
+- Close file path-replacement races by validating and reading configuration, artifact indexes, and imported documents through one bounded descriptor, and stream checksum-verified scrcpy archives directly into the extractor without writing network bytes to a temporary archive.
+
 ## 2.4.0
 
 This is the first stable release of the rebuilt Scrcpy GUI. It completes the M0–M4 software roadmap with the scrcpy 4.1 scene model, device workspace, local diagnostics, device groups, and bounded multi-device automation. See the release smoke report for the hardware, signing, and installer verification gaps that remain explicit rather than inferred.
