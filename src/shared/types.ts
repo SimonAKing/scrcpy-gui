@@ -82,6 +82,32 @@ export interface CommandPreview {
   args: string[]
 }
 
+export type SceneKind = 'screen'
+export type SessionState = 'queued' | 'preflighting' | 'launching' | 'running' | 'stopping' | 'stopped' | 'failed'
+export type SessionStopReason = 'user' | 'boss-key' | 'app-quit' | 'process-exit' | 'launch-error'
+
+export interface ScrcpySession {
+  id: string
+  serialAtLaunch: string
+  scene: SceneKind
+  state: SessionState
+  args: string[]
+  createdAt: string
+  startedAt?: string
+  endedAt?: string
+  pid?: number
+  exitCode?: number
+  stopReason?: SessionStopReason
+  error?: string
+}
+
+export interface ScrcpySessionEvent {
+  type: 'state' | 'output'
+  session: ScrcpySession
+  message: string
+  timestamp: string
+}
+
 export interface WirelessTarget {
   id: string
   name: string
@@ -173,6 +199,8 @@ export interface ScrcpyApi {
   disconnect(runtime: RuntimeConfig, target: string): Promise<OperationResult<string>>
   start(runtime: RuntimeConfig, launches: DeviceLaunch[]): Promise<OperationResult<string[]>>
   preview(launches: DeviceLaunch[]): Promise<OperationResult<CommandPreview[]>>
+  listSessions(): Promise<ScrcpySession[]>
+  stopSession(id: string): Promise<OperationResult>
   stop(serial: string): Promise<OperationResult>
   control(runtime: RuntimeConfig, serial: string, action: DeviceControlAction): Promise<OperationResult<string>>
   screenshot(runtime: RuntimeConfig, serial: string): Promise<OperationResult<string>>
@@ -182,4 +210,5 @@ export interface ScrcpyApi {
   setBossKey(enabled: boolean, accelerator: string): Promise<OperationResult<string>>
   openExternal(url: string): Promise<void>
   onStatus(callback: (event: ScrcpyStatusEvent) => void): () => void
+  onSession(callback: (event: ScrcpySessionEvent) => void): () => void
 }
