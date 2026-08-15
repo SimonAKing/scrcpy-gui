@@ -6,6 +6,7 @@
 
 - Add private vulnerability-reporting guidance and weekly/push/PR CodeQL analysis for JavaScript and TypeScript.
 - Reduce default Release workflow permissions, export a checksummed SPDX 2.3 SBOM, and generate GitHub/Sigstore build-provenance attestations for every release asset.
+- Close file path-replacement races by validating and reading configuration, artifact indexes, and imported documents through one bounded descriptor, and stream checksum-verified scrcpy archives directly into the extractor without writing network bytes to a temporary archive.
 
 ## 2.4.0
 

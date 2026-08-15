@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, n
 import { basename, extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, stat, writeFile } from 'node:fs/promises'
 import { arch, homedir, platform, release } from 'node:os'
 import type {
   BatchPreflightRequest,
@@ -68,6 +68,7 @@ import { deviceCapabilityService } from './deviceCapabilityService'
 import { AutomationRunner } from './automationRunner'
 import { BatchAutomationService, type PreparedBatchResource } from './batchAutomationService'
 import { automationTransferService } from './automationTransferService'
+import { readBoundedRegularUtf8File } from './safeFile'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -659,8 +660,11 @@ handle('profile:import-preview', async (_event, runtime: RuntimeConfig) => {
     if (selection.canceled || !selection.filePaths[0]) {
       return operationFailure('PROFILE_IMPORT_CANCELED', 'profile-import-preview', 'Profile import canceled.')
     }
-    const info = await stat(selection.filePaths[0])
-    if (!info.isFile() || info.size > 2 * 1024 * 1024) throw new TypeError('Profile file must be a regular file no larger than 2 MiB.')
+    const contents = await readBoundedRegularUtf8File(
+      selection.filePaths[0],
+      2 * 1024 * 1024,
+      'Profile file must be a regular file no larger than 2 MiB.'
+    )
     const snapshot = configRepository?.snapshot()
     if (!snapshot) throw new Error('Configuration repository is not ready.')
     const environment = await getEnvironment(runtimeConfig(runtime))
@@ -668,7 +672,7 @@ handle('profile:import-preview', async (_event, runtime: RuntimeConfig) => {
     return {
       ok: true,
       data: profileTransferService.preview(
-        await readFile(selection.filePaths[0], 'utf8'), snapshot.profiles, snapshot.locale, selectedVersion
+        contents, snapshot.profiles, snapshot.locale, selectedVersion
       )
     }
   } catch (error) {
@@ -724,9 +728,12 @@ handle('automation:import-preview', async () => {
     if (selection.canceled || !selection.filePaths[0]) {
       return operationFailure('AUTOMATION_IMPORT_CANCELED', 'automation-import-preview', 'Automation import canceled.')
     }
-    const info = await stat(selection.filePaths[0])
-    if (!info.isFile() || info.size > 2 * 1024 * 1024) throw new TypeError('Automation file must be a regular file no larger than 2 MiB.')
-    return { ok: true, data: automationTransferService.preview(await readFile(selection.filePaths[0], 'utf8')) }
+    const contents = await readBoundedRegularUtf8File(
+      selection.filePaths[0],
+      2 * 1024 * 1024,
+      'Automation file must be a regular file no larger than 2 MiB.'
+    )
+    return { ok: true, data: automationTransferService.preview(contents) }
   } catch (error) {
     return failureFromUnknown(error, 'AUTOMATION_IMPORT_PREVIEW_FAILED', 'automation-import-preview', 'Unable to preview the automation import.')
   }
