@@ -1,6 +1,6 @@
 # v2.4.1 Release verification
 
-v2.4.1 is a licensing-only patch over v2.4.0. It does not claim new device or hardware coverage.
+v2.4.1 is a licensing and verification-tooling patch over v2.4.0. It does not claim new physical-device or scene coverage.
 
 ## Required before tagging
 
@@ -17,7 +17,7 @@ The physical-device, signing/notarization, manual installer, and Chocolatey Comm
 ## Verified locally before the pull request
 
 - `npm run typecheck`;
-- `npm test -- --run`: 19 files / 174 tests;
+- `npm test -- --run`: 20 files / 182 tests;
 - `npm run build`;
 - `npm run icons:check`: 11 assets;
 - unsigned macOS x64/arm64 packaging;

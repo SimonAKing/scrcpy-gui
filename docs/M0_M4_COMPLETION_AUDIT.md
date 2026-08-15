@@ -1,6 +1,6 @@
 # M0–M4 completion audit
 
-Audit baseline: `master` after PR #196, 2026-08-15. This document treats missing direct evidence as incomplete; parser tests and CI are not substituted for physical-device results.
+Audit baseline: `master` after PR #198, 2026-08-15. This document treats missing direct evidence as incomplete; parser tests and CI are not substituted for physical-device results.
 
 ## Status vocabulary
 
