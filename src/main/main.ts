@@ -1,5 +1,6 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell, Tray } from 'electron'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import type {
   AutomationStep,
   DeviceControlAction,
@@ -22,6 +23,7 @@ import {
   stopAllScrcpy,
   stopScrcpy
 } from './processes'
+import { isTrustedRendererUrl, PRODUCTION_CSP } from './security'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -31,6 +33,42 @@ let registeredBossKey = ''
 let killAdbOnQuit = false
 let quitRuntime: RuntimeConfig = { scrcpyPath: '' }
 let shutdownStarted = false
+const rendererEntryUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
+
+function rendererUrlIsTrusted(url: string): boolean {
+  return isTrustedRendererUrl(url, rendererEntryUrl, process.env.ELECTRON_RENDERER_URL)
+}
+
+function assertTrustedIpcSender(event: Electron.IpcMainInvokeEvent): void {
+  if (
+    !mainWindow ||
+    event.sender !== mainWindow.webContents ||
+    event.senderFrame !== mainWindow.webContents.mainFrame ||
+    !rendererUrlIsTrusted(event.senderFrame.url)
+  ) {
+    throw new Error('Rejected IPC request from an untrusted renderer.')
+  }
+}
+
+const handle: typeof ipcMain.handle = (channel, listener) => {
+  ipcMain.handle(channel, (event, ...args) => {
+    assertTrustedIpcSender(event)
+    return listener(event, ...args)
+  })
+}
+
+function configureSessionSecurity(): void {
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+  if (!app.isPackaged) return
+  session.defaultSession.webRequest.onHeadersReceived({ urls: ['file://*/*'] }, (details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [PRODUCTION_CSP]
+      }
+    })
+  })
+}
 
 function sendStatus(status: ScrcpyStatusEvent): void {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('scrcpy:status', status)
@@ -54,6 +92,10 @@ function createWindow(): void {
   })
 
   mainWindow.setMenuBarVisibility(false)
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!rendererUrlIsTrusted(url)) event.preventDefault()
+  })
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.on('close', (event) => {
     if (minimizeToTray && !isQuitting) {
@@ -116,18 +158,18 @@ function setBossKey(enabled: boolean, accelerator: string): OperationResult<stri
   }
 }
 
-ipcMain.handle('app:version', () => app.getVersion())
-ipcMain.handle('app:minimize-to-tray', (_event, enabled: boolean) => {
+handle('app:version', () => app.getVersion())
+handle('app:minimize-to-tray', (_event, enabled: boolean) => {
   minimizeToTray = Boolean(enabled)
 })
-ipcMain.handle('app:quit-behavior', (_event, runtime: RuntimeConfig, shouldKillAdb: boolean) => {
+handle('app:quit-behavior', (_event, runtime: RuntimeConfig, shouldKillAdb: boolean) => {
   quitRuntime = { scrcpyPath: String(runtime?.scrcpyPath || '') }
   killAdbOnQuit = Boolean(shouldKillAdb)
 })
-ipcMain.handle('app:boss-key', (_event, enabled: boolean, accelerator: string) =>
+handle('app:boss-key', (_event, enabled: boolean, accelerator: string) =>
   setBossKey(Boolean(enabled), String(accelerator || ''))
 )
-ipcMain.handle('dialog:scrcpy', async () => {
+handle('dialog:scrcpy', async () => {
   const result = await dialog.showOpenDialog({
     title: 'Choose the scrcpy executable',
     properties: ['openFile'],
@@ -135,7 +177,7 @@ ipcMain.handle('dialog:scrcpy', async () => {
   })
   return result.canceled ? '' : result.filePaths[0] || ''
 })
-ipcMain.handle('dialog:record', async () => {
+handle('dialog:record', async () => {
   const result = await dialog.showSaveDialog({
     title: 'Choose recording destination',
     defaultPath: `scrcpy-${new Date().toISOString().replaceAll(':', '-').slice(0, 19)}.mp4`,
@@ -146,7 +188,7 @@ ipcMain.handle('dialog:record', async () => {
   })
   return result.canceled ? '' : result.filePath || ''
 })
-ipcMain.handle('dialog:record-directory', async () => {
+handle('dialog:record-directory', async () => {
   const result = await dialog.showOpenDialog({
     title: 'Choose recording folder',
     defaultPath: app.getPath('videos'),
@@ -154,27 +196,27 @@ ipcMain.handle('dialog:record-directory', async () => {
   })
   return result.canceled ? '' : result.filePaths[0] || ''
 })
-ipcMain.handle('system:environment', (_event, runtime: RuntimeConfig) => getEnvironment(runtime))
-ipcMain.handle('device:list', (_event, runtime: RuntimeConfig) => listDevices(runtime))
-ipcMain.handle('device:connect', (_event, runtime: RuntimeConfig, target: string) => connectDevice(runtime, target))
-ipcMain.handle('device:pair', (_event, runtime: RuntimeConfig, target: string, code: string) =>
+handle('system:environment', (_event, runtime: RuntimeConfig) => getEnvironment(runtime))
+handle('device:list', (_event, runtime: RuntimeConfig) => listDevices(runtime))
+handle('device:connect', (_event, runtime: RuntimeConfig, target: string) => connectDevice(runtime, target))
+handle('device:pair', (_event, runtime: RuntimeConfig, target: string, code: string) =>
   pairDevice(runtime, target, code)
 )
-ipcMain.handle('device:disconnect', (_event, runtime: RuntimeConfig, target: string) =>
+handle('device:disconnect', (_event, runtime: RuntimeConfig, target: string) =>
   disconnectDevice(runtime, target)
 )
-ipcMain.handle(
+handle(
   'scrcpy:start',
   (_event, runtime: RuntimeConfig, launches: DeviceLaunch[]) =>
     startScrcpy(runtime, launches, sendStatus)
 )
-ipcMain.handle('scrcpy:stop', (_event, serial: string) => stopScrcpy(serial))
-ipcMain.handle(
+handle('scrcpy:stop', (_event, serial: string) => stopScrcpy(serial))
+handle(
   'device:control',
   (_event, runtime: RuntimeConfig, serial: string, action: DeviceControlAction) =>
     controlDevice(runtime, serial, action)
 )
-ipcMain.handle('device:screenshot', async (_event, runtime: RuntimeConfig, serial: string) => {
+handle('device:screenshot', async (_event, runtime: RuntimeConfig, serial: string) => {
   const safeSerial = serial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
   const timestamp = new Date().toISOString().replaceAll(':', '-').slice(0, 19)
   const result = await dialog.showSaveDialog({
@@ -185,12 +227,12 @@ ipcMain.handle('device:screenshot', async (_event, runtime: RuntimeConfig, seria
   if (result.canceled || !result.filePath) return { ok: false, error: 'Screenshot canceled.' }
   return captureDeviceScreenshot(runtime, serial, result.filePath)
 })
-ipcMain.handle(
+handle(
   'device:automation',
   (_event, runtime: RuntimeConfig, serial: string, steps: AutomationStep[]) =>
     runDeviceAutomation(runtime, serial, steps)
 )
-ipcMain.handle('shell:open', async (_event, rawUrl: string) => {
+handle('shell:open', async (_event, rawUrl: string) => {
   const url = new URL(rawUrl)
   const allowedHosts = new Set(['github.com', 'scrcpyapp.org'])
   if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname)) throw new Error('External URL is not allowed.')
@@ -198,6 +240,7 @@ ipcMain.handle('shell:open', async (_event, rawUrl: string) => {
 })
 
 app.whenReady().then(() => {
+  configureSessionSecurity()
   createWindow()
   createTray()
   app.on('activate', () => {

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- Validate every privileged IPC call against the main application frame and trusted renderer URL.
+- Deny renderer permission requests, new windows, and navigation to untrusted locations.
+- Apply a production-only Content Security Policy that removes development localhost access and blocks object, base, and form targets.
+
 ## 2.0.0-beta.3
 
 ### Changed
