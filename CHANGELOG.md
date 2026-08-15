@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Detect supported scrcpy scenes and probe commands from the selected runtime's real `--help` output instead of assuming every build has the same capabilities.
+
 ## 2.0.0-beta.4
 
 This release establishes a secure, observable session foundation and replaces the remaining legacy application artwork.

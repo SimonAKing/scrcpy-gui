@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, toRaw, watch } fro
 import type {
   AutomationMacro,
   AutomationStep,
+  CapabilitySnapshot,
   CommandPreview,
   Device,
   DeviceControlAction,
@@ -166,6 +167,13 @@ const allSelected = computed(() =>
 )
 const controlDevice = computed(() => devices.value.find((device) => device.serial === controlSerial.value))
 const settingsSections: SettingsSection[] = ['general', 'video', 'controls', 'recording', 'geometry', 'advanced']
+const capabilityFeatureKeys: Array<keyof CapabilitySnapshot['features']> = [
+  'screen', 'camera', 'virtualDisplay', 'recordOnly', 'controlOnly', 'otg', 'v4l2', 'appLaunch'
+]
+const availableCapabilities = computed(() => {
+  const features = environment.value?.scrcpy.capabilities?.features
+  return features ? capabilityFeatureKeys.filter((feature) => features[feature]) : []
+})
 
 const runtimeSnapshot = () => ({ scrcpyPath: config.runtime.scrcpyPath })
 const launchSnapshot = (serial?: string): LaunchConfig => {
@@ -612,6 +620,12 @@ onBeforeUnmount(() => {
             <code :title="environment?.adb.version">{{ runtimeVersion('adb') }}</code>
           </div>
         </div>
+        <div v-if="environment?.scrcpy.ok" class="runtime-capabilities">
+          <span class="runtime-capabilities-label">{{ t('runtimeCapabilities') }}</span>
+          <span v-for="feature in availableCapabilities" :key="feature" class="capability-pill">{{ t(`capability_${feature}`) }}</span>
+          <span v-if="!availableCapabilities.length" class="muted">{{ t('capabilitiesUnavailable') }}</span>
+        </div>
+        <p v-if="environment?.scrcpy.capabilityError" class="inline-warning runtime-capability-error">{{ t('capabilityProbeFailed') }}</p>
       </section>
 
       <template v-if="activeTab === 'devices'">

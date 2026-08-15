@@ -17,6 +17,7 @@ import type {
 } from '../shared/types'
 import { buildScrcpyArgs, isSupportedScrcpyVersion, parseAdbDevices, validateDeviceAddress } from './scrcpy'
 import { ScrcpySessionManager } from './sessionManager'
+import { buildCapabilitySnapshot } from './capabilities'
 
 interface CommandOutput {
   stdout: string
@@ -139,7 +140,17 @@ export async function getEnvironment(runtime: RuntimeConfig): Promise<Environmen
       const result = await execute(scrcpyPath, ['--version'])
       status.scrcpy.version = firstVersionLine(`${result.stdout}\n${result.stderr}`, 'scrcpy')
       status.scrcpy.ok = isSupportedScrcpyVersion(status.scrcpy.version)
-      if (!status.scrcpy.ok) status.scrcpy.error = `scrcpy 4.x or newer is required; found ${status.scrcpy.version || 'an unknown version'}.`
+      if (!status.scrcpy.ok) {
+        status.scrcpy.error = `scrcpy 4.x or newer is required; found ${status.scrcpy.version || 'an unknown version'}.`
+      } else {
+        try {
+          const help = await execute(scrcpyPath, ['--help'])
+          status.scrcpy.capabilities = buildCapabilitySnapshot(`${help.stdout}\n${help.stderr}`)
+        } catch (error) {
+          status.scrcpy.capabilities = buildCapabilitySnapshot('')
+          status.scrcpy.capabilityError = error instanceof Error ? error.message : String(error)
+        }
+      }
     } catch (error) {
       status.scrcpy.error = error instanceof Error ? error.message : String(error)
     }

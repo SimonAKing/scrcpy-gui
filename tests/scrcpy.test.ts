@@ -9,6 +9,7 @@ import {
   validatePortRange
 } from '../src/main/scrcpy'
 import { isTrustedRendererUrl, PRODUCTION_CSP } from '../src/main/security'
+import { buildCapabilitySnapshot, parseScrcpyHelpFlags } from '../src/main/capabilities'
 
 function config(overrides: Partial<LaunchConfig> = {}): LaunchConfig {
   return {
@@ -72,6 +73,63 @@ describe('isSupportedScrcpyVersion', () => {
   it('rejects legacy and unrelated executables', () => {
     expect(isSupportedScrcpyVersion('scrcpy 1.23')).toBe(false)
     expect(isSupportedScrcpyVersion('not scrcpy')).toBe(false)
+  })
+})
+
+describe('scrcpy capability registry', () => {
+  const help = `
+    -r, --record=file.mp4
+    -N, --no-playback
+    --video-source=source
+    --camera-id=id
+    --list-cameras
+    --list-camera-sizes
+    --new-display[=[<width>x<height>][/<dpi>]]
+    --no-video
+    --otg
+    --v4l2-sink=/dev/videoN
+    --start-app=name
+    --list-apps
+    --list-displays
+    --list-encoders
+    --list-cameras
+  `
+
+  it('extracts normalized, unique long flags from option declarations', () => {
+    const flags = parseScrcpyHelpFlags(help)
+    expect(flags).toContain('--record')
+    expect(flags).toContain('--no-playback')
+    expect(flags.filter((flag) => flag === '--list-cameras')).toHaveLength(1)
+    expect(flags).toEqual([...flags].sort())
+  })
+
+  it('derives scene and probe support without assuming the host platform', () => {
+    const mac = buildCapabilitySnapshot(help, 'darwin')
+    expect(mac.features).toEqual({
+      screen: true,
+      camera: true,
+      virtualDisplay: true,
+      recordOnly: true,
+      controlOnly: true,
+      otg: true,
+      v4l2: false,
+      appLaunch: true
+    })
+    expect(mac.probes).toEqual({ encoders: true, displays: true, cameras: true, cameraSizes: true, apps: true })
+    expect(buildCapabilitySnapshot(help, 'linux').features.v4l2).toBe(true)
+  })
+
+  it('keeps unknown custom builds disabled instead of inventing support', () => {
+    expect(buildCapabilitySnapshot('').features).toEqual({
+      screen: false,
+      camera: false,
+      virtualDisplay: false,
+      recordOnly: false,
+      controlOnly: false,
+      otg: false,
+      v4l2: false,
+      appLaunch: false
+    })
   })
 })
 
