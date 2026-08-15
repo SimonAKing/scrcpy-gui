@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>scrcpy-gui</id>
+    <version>2.0.0-beta.2</version>
+    <title>Scrcpy GUI</title>
+    <authors>Simon Ma and contributors</authors>
+    <owners>SimonAKing</owners>
+    <projectUrl>https://github.com/SimonAKing/scrcpy-gui</projectUrl>
+    <packageSourceUrl>https://github.com/SimonAKing/scrcpy-gui/tree/master/packaging/chocolatey</packageSourceUrl>
+    <projectSourceUrl>https://github.com/SimonAKing/scrcpy-gui</projectSourceUrl>
+    <bugTrackerUrl>https://github.com/SimonAKing/scrcpy-gui/issues</bugTrackerUrl>
+    <licenseUrl>https://github.com/SimonAKing/scrcpy-gui/blob/master/LICENSE</licenseUrl>
+    <iconUrl>https://raw.githubusercontent.com/SimonAKing/scrcpy-gui/master/build/icons/256x256.png</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <summary>A modern desktop GUI for scrcpy</summary>
+    <description><![CDATA[
+Scrcpy GUI discovers Android devices over USB or wireless debugging and launches scrcpy with visual, per-device configuration.
+
+Features include Android 11+ wireless pairing, multiple simultaneous devices, recording, audio, keyboard modes, screenshots, a clickable device control panel, launch profiles, saved wireless addresses, ADB action automation, and detailed process logs.
+    ]]></description>
+    <releaseNotes>https://github.com/SimonAKing/scrcpy-gui/releases</releaseNotes>
+    <copyright>Copyright © 2019-2026 Simon Ma and contributors</copyright>
+    <tags>scrcpy android adb screen mirror gui desktop</tags>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

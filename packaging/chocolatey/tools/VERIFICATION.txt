@@ -1,0 +1,16 @@
+VERIFICATION
+
+The installer is downloaded directly from the official Scrcpy GUI GitHub release:
+
+  https://github.com/SimonAKing/scrcpy-gui/releases
+
+The SHA-256 checksum in chocolateyInstall.ps1 is calculated from the matching
+Scrcpy.GUI-<version>-win-x64.exe asset by the repository release workflow before
+the .nupkg is built. To verify a downloaded installer manually:
+
+  Get-FileHash .\Scrcpy.GUI-<version>-win-x64.exe -Algorithm SHA256
+
+Source code and the build workflow are available at:
+
+  https://github.com/SimonAKing/scrcpy-gui
+  https://github.com/SimonAKing/scrcpy-gui/blob/master/.github/workflows/release.yml

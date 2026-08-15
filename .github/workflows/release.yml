@@ -34,6 +34,18 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: ${{ matrix.command }}
+      - name: Build Chocolatey package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $installer = Get-Item "release/Scrcpy.GUI-$version-win-x64.exe"
+          $checksum = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $script = 'packaging/chocolatey/tools/chocolateyInstall.ps1'
+          $content = Get-Content $script -Raw
+          $content = $content -replace '(?m)^\$checksum64 = ''[a-f0-9]+''$', "`$checksum64 = '$checksum'"
+          Set-Content $script $content -Encoding utf8
+          choco pack packaging/chocolatey/scrcpy-gui.nuspec --version $version --outputdirectory release
       - uses: actions/upload-artifact@v7
         with:
           name: Scrcpy-GUI-${{ matrix.artifact }}
@@ -44,6 +56,9 @@ jobs:
             release/*.exe
             release/*.AppImage
             release/*.deb
+            release/*.pacman
+            release/*.tar.gz
+            release/*.nupkg
 
   publish:
     needs: package
@@ -57,3 +72,23 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
           files: artifacts/**/*
+
+  publish-chocolatey:
+    needs: [package, publish]
+    runs-on: windows-latest
+    env:
+      CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: Scrcpy-GUI-Windows
+          path: artifacts
+      - name: Push to Chocolatey Community Repository
+        shell: pwsh
+        run: |
+          if (-not $env:CHOCO_API_KEY) {
+            Write-Host 'CHOCO_API_KEY is not configured; the verified .nupkg remains attached to the GitHub release.'
+            exit 0
+          }
+          $package = Get-Item 'artifacts/*.nupkg'
+          choco push $package.FullName --source https://push.chocolatey.org/ --api-key $env:CHOCO_API_KEY
