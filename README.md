@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/SimonAKing/scrcpy-gui/actions/workflows/validate.yml"><img src="https://github.com/SimonAKing/scrcpy-gui/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
-  <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/v/release/SimonAKing/scrcpy-gui?include_prereleases&style=flat-square" alt="Latest release"></a>
+  <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/v/release/SimonAKing/scrcpy-gui?style=flat-square" alt="Latest stable release"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/downloads/SimonAKing/scrcpy-gui/total.svg?style=flat-square" alt="Downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/SimonAKing/scrcpy-gui?style=flat-square" alt="GPL-3.0"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat-square" alt="Contributions welcome"></a>
@@ -15,7 +15,7 @@
 
 Scrcpy GUI discovers Android devices over USB or wireless debugging and launches [scrcpy](https://github.com/Genymobile/scrcpy) with a reliable, visual configuration. It supports several devices at once, recording, audio, modern keyboard modes, cropping, window placement, and the current scrcpy 4.x command line.
 
-> Version 2.0 is a ground-up modernization and is currently in beta. When reporting a regression, please include the Logs tab output, your operating system, and your scrcpy version.
+> Version 2.4 is the first stable release of the ground-up modernization. When reporting a regression, please include the Logs tab output, your operating system, and your scrcpy version.
 
 ## Interface
 
@@ -72,7 +72,9 @@ Download the package for your platform from [GitHub Releases](https://github.com
 - **macOS:** Intel or Apple Silicon `.dmg` / `.zip`
 - **Linux:** `.AppImage`, Debian (`.deb`), Arch (`.pacman`), or portable `.tar.gz`
 
-The current beta artifacts are not code-signed or notarized. Your operating system may ask you to confirm that you trust the downloaded application.
+The current stable artifacts are not code-signed or notarized. Your operating system may ask you to confirm that you trust the downloaded application. Verify the download against the release `SHA256SUMS.txt` before opening it.
+
+The exact automated checks and unverified hardware/installer matrix are recorded in the [v2.4.0 release smoke report](docs/RELEASE_SMOKE_V2.4.0.md).
 
 ### Use another scrcpy installation
 
