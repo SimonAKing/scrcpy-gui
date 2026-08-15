@@ -5,6 +5,7 @@
 ### Added
 
 - Detect supported scrcpy scenes and probe commands from the selected runtime's real `--help` output instead of assuming every build has the same capabilities.
+- Store configuration in a validated, revisioned V3 file owned by the main process, with atomic replacement, backup recovery, and a non-destructive migration from beta local storage.
 
 ## 2.0.0-beta.4
 

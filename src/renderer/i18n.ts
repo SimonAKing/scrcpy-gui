@@ -1,6 +1,4 @@
-import type { PersistedConfig } from '../shared/types'
-
-type Locale = PersistedConfig['locale']
+import type { Locale } from '../shared/types'
 
 const en: Record<string, string> = {
   devices: 'Devices',
@@ -117,6 +115,8 @@ const en: Record<string, string> = {
   bossKey: 'Enable boss key', bossKeyShortcut: 'Global shortcut',
   bossKeyHint: 'Emergency privacy action: closes every active mirror and hides Scrcpy GUI. Restore the app from its tray icon.',
   operationFailed: 'Operation failed',
+  configMigrated: 'Configuration migrated to secure V3 storage (imported/skipped/invalid):',
+  configLoadFailed: 'Could not load the main-process configuration.', configSaveFailed: 'Could not save configuration.',
   environmentReady: 'scrcpy and adb are ready.',
   launched: 'scrcpy started.',
   stopped: 'scrcpy stopped.',
@@ -179,6 +179,7 @@ const zhCN: Record<string, string> = {
   tunnelPort: '隧道端口或范围', tunnelPortHint: '留空使用 scrcpy 默认值（27183:27199）。',
   bossKeyHint: '紧急隐私操作：关闭全部投屏并隐藏 Scrcpy GUI；可通过托盘图标恢复主界面。',
   operationFailed: '操作失败', environmentReady: 'scrcpy 与 adb 已就绪。', launched: 'scrcpy 已启动。', stopped: 'scrcpy 已停止。',
+  configMigrated: '配置已迁移到安全的 V3 存储（导入/跳过/无效）：', configLoadFailed: '无法加载主进程配置。', configSaveFailed: '无法保存配置。',
   paired: '设备配对成功。', connected: '设备连接成功。', disconnected: '设备已断开。'
 }
 
@@ -205,6 +206,7 @@ const zhTW: Record<string, string> = {
   minimizeToTray: '關閉視窗時最小化到系統匣',
   clearLogs: '清除日誌', noLogs: '暫時沒有程序日誌。', running: '執行中', offline: '離線', selectAll: '全選',
   operationFailed: '操作失敗', environmentReady: 'scrcpy 與 adb 已就緒。', launched: 'scrcpy 已啟動。', stopped: 'scrcpy 已停止。',
+  configMigrated: '設定已遷移到安全的 V3 儲存（匯入/略過/無效）：', configLoadFailed: '無法載入主程序設定。', configSaveFailed: '無法儲存設定。',
   paired: '裝置配對成功。', connected: '裝置連接成功。', disconnected: '裝置已中斷。'
 }
 
@@ -240,6 +242,7 @@ const ru: Record<string, string> = {
   minimizeToTray: 'Сворачивать в трей при закрытии окна',
   clearLogs: 'Очистить журнал', noLogs: 'Вывод процессов пока отсутствует.', openGithub: 'GitHub', running: 'Запущено', offline: 'Не в сети',
   usb: 'USB', selectAll: 'Выбрать все', operationFailed: 'Операция не выполнена', environmentReady: 'scrcpy и adb готовы.',
+  configMigrated: 'Настройки перенесены в защищённое хранилище V3 (импорт/пропуск/ошибка):', configLoadFailed: 'Не удалось загрузить настройки.', configSaveFailed: 'Не удалось сохранить настройки.',
   launched: 'scrcpy запущен.', stopped: 'scrcpy остановлен.', paired: 'Устройство сопряжено.', connected: 'Устройство подключено.', disconnected: 'Устройство отключено.'
 }
 

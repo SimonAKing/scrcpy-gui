@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, toRaw, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, toRaw, watch } from 'vue'
 import type {
   AutomationMacro,
   AutomationStep,
@@ -16,6 +16,7 @@ import type {
   ScrcpyStatusEvent,
   WirelessTarget
 } from '../shared/types'
+import { defaultPersistedConfig, legacyConfigView } from '../shared/config'
 import { translate } from './i18n'
 
 type Tab = 'devices' | 'sessions' | 'settings' | 'logs'
@@ -29,6 +30,7 @@ interface Toast {
 }
 
 const STORAGE_KEY = 'scrcpy-gui:config:v2'
+const MIGRATION_KEY = 'scrcpy-gui:config:v3-migrated'
 
 const controlActions: DeviceControlAction[] = [
   'back',
@@ -53,77 +55,15 @@ function detectedLocale(): PersistedConfig['locale'] {
   return locale.startsWith('zh') ? 'zh-CN' : 'en'
 }
 
-function defaultLaunchConfig(): LaunchConfig {
-  return {
-    windowTitle: '', videoBitRate: 8, videoBuffer: 0, audioBuffer: 0, maxSize: 0, maxFps: 0, displayId: 0,
-    orientation: '0', videoCodec: 'default',
-    shortcutModifier: 'default', keyboardMode: 'default', mouseMode: 'default', gamepadMode: 'default',
-    alwaysOnTop: false, control: true, audio: true,
-    turnScreenOff: false, stayAwake: false, showTouches: false, fullscreen: false, borderless: false,
-    windowAspectRatioLock: true,
-    pushTarget: '', tunnelPort: '',
-    recordEnabled: false, recordPath: '', autoRecordName: false, recordDirectory: '', noPlayback: false,
-    crop: { x: 0, y: 0, width: 0, height: 0 },
-    window: { x: 0, y: 0, width: 0, height: 0 },
-    extraArgs: ''
-  }
-}
-
-function normalizedLaunch(stored?: Partial<LaunchConfig>): LaunchConfig {
-  const defaults = defaultLaunchConfig()
-  return {
-    ...defaults,
-    ...stored,
-    crop: { ...defaults.crop, ...stored?.crop },
-    window: { ...defaults.window, ...stored?.window }
-  }
-}
-
-function defaultConfig(): PersistedConfig {
-  return {
-    runtime: { scrcpyPath: '' },
-    locale: detectedLocale(),
-    muteNotifications: false,
-    minimizeToTray: false,
-    killAdbOnQuit: false,
-    bossKeyEnabled: false,
-    bossKeyAccelerator: 'CommandOrControl+Shift+B',
-    autoSelectFirstDevice: true,
-    autoLaunchDevices: {},
-    launch: defaultLaunchConfig(),
-    profiles: [],
-    deviceProfiles: {},
-    deviceAliases: {},
-    wirelessTargets: [],
-    automations: []
-  }
-}
-
-function loadConfig(): PersistedConfig {
-  const defaults = defaultConfig()
+function loadLegacyConfig(): PersistedConfig {
   try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') as Partial<PersistedConfig>
-    const profiles = Array.isArray(stored.profiles)
-      ? stored.profiles.map((profile) => ({ ...profile, launch: normalizedLaunch(profile.launch) }))
-      : []
-    return {
-      ...defaults,
-      ...stored,
-      runtime: { ...defaults.runtime, ...stored.runtime },
-      launch: normalizedLaunch(stored.launch),
-      profiles,
-      deviceProfiles: stored.deviceProfiles || {},
-      deviceAliases: stored.deviceAliases || {},
-      autoLaunchDevices: stored.autoLaunchDevices || {},
-      wirelessTargets: Array.isArray(stored.wirelessTargets) ? stored.wirelessTargets : [],
-      automations: Array.isArray(stored.automations) ? stored.automations : []
-    }
+    return legacyConfigView(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'), detectedLocale())
   } catch {
-    return defaults
+    return defaultPersistedConfig(detectedLocale())
   }
 }
 
-const config = reactive(loadConfig())
+const config = reactive(loadLegacyConfig())
 const activeTab = ref<Tab>('devices')
 const activeSettingsSection = ref<SettingsSection>('general')
 const version = ref('2.0.0')
@@ -151,6 +91,10 @@ let pollTimer: number | undefined
 let removeStatusListener: (() => void) | undefined
 let removeSessionListener: (() => void) | undefined
 let lastRecordedActionAt = 0
+let configRevision = 0
+let configReady = false
+let configSaveInFlight = false
+let configSavePending = false
 const autoLaunchAttempted = new Set<string>()
 
 const t = (key: string): string => translate(config.locale, key)
@@ -185,9 +129,27 @@ const launchSnapshot = (serial?: string): LaunchConfig => {
   return launch
 }
 
+async function persistConfig(): Promise<void> {
+  if (!configReady) return
+  if (configSaveInFlight) {
+    configSavePending = true
+    return
+  }
+  configSaveInFlight = true
+  const snapshot = structuredClone(toRaw(config))
+  const result = await window.scrcpy.saveConfig(configRevision, snapshot)
+  if (result.ok && result.data) configRevision = result.data.revision
+  else toast('error', result.error || t('configSaveFailed'))
+  configSaveInFlight = false
+  if (configSavePending) {
+    configSavePending = false
+    await persistConfig()
+  }
+}
+
 watch(
   config,
-  (value) => localStorage.setItem(STORAGE_KEY, JSON.stringify(value)),
+  () => void persistConfig(),
   { deep: true }
 )
 
@@ -199,17 +161,17 @@ watch(
 
 watch(
   () => config.minimizeToTray,
-  (enabled) => void window.scrcpy.setMinimizeToTray(enabled)
+  (enabled) => { if (configReady) void window.scrcpy.setMinimizeToTray(enabled) }
 )
 
 watch(
   [() => config.killAdbOnQuit, () => config.runtime.scrcpyPath],
-  () => void window.scrcpy.setQuitBehavior(runtimeSnapshot(), config.killAdbOnQuit)
+  () => { if (configReady) void window.scrcpy.setQuitBehavior(runtimeSnapshot(), config.killAdbOnQuit) }
 )
 
 watch(
   () => config.bossKeyEnabled,
-  () => void applyBossKey(true)
+  () => { if (configReady) void applyBossKey(true) }
 )
 
 watch(usableDevices, (nextDevices) => {
@@ -482,7 +444,7 @@ async function applyBossKey(notify = false): Promise<void> {
 }
 
 function resetSettings(): void {
-  const defaults = defaultConfig()
+  const defaults = defaultPersistedConfig(config.locale)
   Object.assign(config.launch, defaults.launch)
   config.muteNotifications = defaults.muteNotifications
   config.minimizeToTray = defaults.minimizeToTray
@@ -551,6 +513,19 @@ function statusLabel(device: Device): string {
 }
 
 onMounted(async () => {
+  try {
+    const loaded = await window.scrcpy.loadConfig(localStorage.getItem(STORAGE_KEY) || '', detectedLocale())
+    Object.assign(config, loaded.config)
+    configRevision = loaded.revision
+    localStorage.setItem(MIGRATION_KEY, JSON.stringify({ schemaVersion: 3, ...loaded.migration }))
+    await nextTick()
+    configReady = true
+    if (loaded.migration.source === 'legacy-v2') {
+      toast('success', `${t('configMigrated')} ${loaded.migration.imported}/${loaded.migration.skipped}/${loaded.migration.invalid}`)
+    }
+  } catch (error) {
+    toast('error', `${t('configLoadFailed')} ${error instanceof Error ? error.message : String(error)}`)
+  }
   version.value = await window.scrcpy.getVersion()
   removeStatusListener = window.scrcpy.onStatus(handleStatus)
   removeSessionListener = window.scrcpy.onSession(handleSession)
