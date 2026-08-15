@@ -192,7 +192,6 @@ npm run build:dir
 ## 社区与致谢
 
 - 问题、Bug 与功能建议：[GitHub Issues](https://github.com/SimonAKing/scrcpy-gui/issues)
-- 中文社区：[Scrcpy-GUI QQ 群](https://jq.qq.com/?_wv=1027&k=5jxRe2o)
 - 俄语翻译最初由 [@dEN5-tech](https://github.com/dEN5-tech) 在 [#69](https://github.com/SimonAKing/scrcpy-gui/pull/69) 中贡献，并已迁移到 2.0 界面。
 - 感谢 [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) 以及 Scrcpy GUI 的所有贡献者。
 
