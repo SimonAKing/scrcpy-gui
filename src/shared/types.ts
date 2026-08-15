@@ -261,7 +261,7 @@ export interface BatchOperationResult<T> {
 
 export interface BatchProgressEvent {
   batchId: string
-  kind: 'file-push' | 'apk-install'
+  kind: 'file-push' | 'apk-install' | 'launch' | 'control' | 'screenshot' | 'start-app' | 'automation'
   deviceId: string
   targetId: string
   status: 'running' | 'success' | 'failed' | 'skipped'
@@ -352,15 +352,112 @@ export type DeviceControlAction =
   | 'show-touches-on'
   | 'show-touches-off'
 
-export interface AutomationStep {
-  action: DeviceControlAction
-  delayMs: number
+export interface NormalizedPoint {
+  x: number
+  y: number
 }
+
+export type AutomationOrientation = 'any' | 'portrait' | 'landscape'
+
+export type DeviceCondition =
+  | { type: 'orientation'; value: Exclude<AutomationOrientation, 'any'> }
+  | { type: 'aspect-ratio'; value: number; tolerance: number }
+
+export type AutomationStep =
+  | { type: 'delay'; durationMs: number }
+  | { type: 'control'; action: DeviceControlAction }
+  | { type: 'tap'; x: number; y: number; coordinateSpace: 'normalized' }
+  | { type: 'swipe'; from: NormalizedPoint; to: NormalizedPoint; durationMs: number; coordinateSpace: 'normalized' }
+  | { type: 'text'; value: string; sensitive: false }
+  | { type: 'start-app'; packageId: string }
+  | { type: 'screenshot'; label?: string }
+  | { type: 'assert-device'; condition: DeviceCondition }
 
 export interface AutomationMacro {
   id: string
   name: string
+  description: string
+  schemaVersion: 2
+  design: {
+    orientation: AutomationOrientation
+    aspectRatio: number
+  }
   steps: AutomationStep[]
+}
+
+export interface AutomationImportPreview {
+  token: string
+  automation: AutomationMacro
+  warnings: string[]
+  dangerousStepCount: number
+  trusted: false
+}
+
+export type BatchAction =
+  | { type: 'launch'; launches: DeviceLaunch[] }
+  | { type: 'control'; action: DeviceControlAction }
+  | { type: 'screenshot' }
+  | { type: 'start-app'; packageId: string }
+  | { type: 'automation'; automation: AutomationMacro }
+  | { type: 'file-push'; target: string; conflict: FileConflictPolicy }
+  | { type: 'apk-install'; replace: boolean; downgrade: boolean }
+
+export interface BatchPreflightRequest {
+  serials: string[]
+  action: BatchAction
+  concurrencyLimit: number
+}
+
+export type BatchPreflightCheck = 'pass' | 'warning' | 'fail'
+
+export interface BatchPreflightItem {
+  serial: string
+  online: boolean
+  authorized: boolean
+  capability: BatchPreflightCheck
+  sessionConflict: boolean
+  eligible: boolean
+  estimatedAction: string
+  reasons: string[]
+}
+
+export interface BatchPreflight {
+  token: string
+  createdAt: string
+  expiresAt: string
+  actionType: BatchAction['type']
+  confirmationRequired: boolean
+  confirmationKind?: 'input' | 'overwrite' | 'downgrade'
+  items: BatchPreflightItem[]
+}
+
+export type BatchRunState = 'running' | 'completed' | 'partial' | 'failed' | 'canceled'
+
+export interface BatchActionResult {
+  serial: string
+  actionType: BatchAction['type']
+  message: string
+  artifactId?: string
+  sessionIds?: string[]
+  completedSteps?: number
+}
+
+export interface BatchRunReport extends BatchOperationResult<BatchActionResult> {
+  actionType: BatchAction['type']
+  state: BatchRunState
+  canceled: boolean
+}
+
+export interface BatchRunEvent {
+  runId: string
+  actionType: BatchAction['type']
+  targetId?: string
+  stepIndex?: number
+  stepType?: AutomationStep['type']
+  status: 'started' | 'step-start' | 'step-success' | 'step-failure' | 'step-skipped' | 'target-success' | 'target-failure' | 'canceled' | 'completed'
+  timestamp: string
+  message: string
+  report?: BatchRunReport
 }
 
 export type Locale = 'en' | 'zh-CN' | 'zh-TW' | 'ru'
@@ -373,6 +470,7 @@ export interface PersistedConfig {
   deviceAliases: Record<string, string>
   wirelessTargets: WirelessTarget[]
   automations: AutomationMacro[]
+  groups: DeviceGroupView[]
   locale: Locale
   muteNotifications: boolean
   minimizeToTray: boolean
@@ -401,6 +499,18 @@ export interface DeviceGroup {
   id: string
   name: string
   deviceIds: string[]
+  defaultProfileId?: string
+  concurrencyLimit: number
+  description: string
+}
+
+export interface DeviceGroupView {
+  id: string
+  name: string
+  serials: string[]
+  defaultProfileId?: string
+  concurrencyLimit: number
+  description: string
 }
 
 export interface AppConfigV3 {
@@ -579,7 +689,12 @@ export interface ScrcpyApi {
   stop(serial: string): Promise<OperationResult>
   control(runtime: RuntimeConfig, serial: string, action: DeviceControlAction): Promise<OperationResult<string>>
   screenshot(runtime: RuntimeConfig, serial: string): Promise<OperationResult<string>>
-  runAutomation(runtime: RuntimeConfig, serial: string, steps: AutomationStep[]): Promise<OperationResult<string>>
+  previewAutomationImport(): Promise<OperationResult<AutomationImportPreview>>
+  commitAutomationImport(token: string): Promise<OperationResult<AutomationMacro>>
+  exportAutomation(automation: AutomationMacro): Promise<OperationResult<string>>
+  preflightBatch(runtime: RuntimeConfig, request: BatchPreflightRequest): Promise<OperationResult<BatchPreflight>>
+  startBatch(runtime: RuntimeConfig, token: string, passingOnly: boolean, confirmedDangerous: boolean): Promise<OperationResult<string>>
+  cancelBatch(runId: string): Promise<OperationResult>
   getDeviceOverview(runtime: RuntimeConfig, serial: string): Promise<OperationResult<DeviceOverview>>
   pushFiles(runtime: RuntimeConfig, serials: string[], target: string, conflict: FileConflictPolicy): Promise<OperationResult<BatchOperationResult<FileTransferResult>>>
   installApk(runtime: RuntimeConfig, serials: string[], replace: boolean, downgrade: boolean): Promise<OperationResult<BatchOperationResult<ApkInstallResult>>>
@@ -606,4 +721,5 @@ export interface ScrcpyApi {
   onDevices(callback: (event: DeviceTrackerEvent) => void): () => void
   onEvent(callback: (event: AppEvent) => void): () => void
   onBatchProgress(callback: (event: BatchProgressEvent) => void): () => void
+  onBatchRun(callback: (event: BatchRunEvent) => void): () => void
 }

@@ -1,10 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
-  AutomationStep,
+  AutomationMacro,
   AppEvent,
   AppEventQuery,
   ArtifactQuery,
+  BatchPreflightRequest,
   BatchProgressEvent,
+  BatchRunEvent,
   FileConflictPolicy,
   LaunchProfile,
   LaunchConfig,
@@ -50,8 +52,14 @@ const api: ScrcpyApi = {
     ipcRenderer.invoke('device:control', runtime, serial, action),
   screenshot: (runtime: RuntimeConfig, serial: string) =>
     ipcRenderer.invoke('device:screenshot', runtime, serial),
-  runAutomation: (runtime: RuntimeConfig, serial: string, steps: AutomationStep[]) =>
-    ipcRenderer.invoke('device:automation', runtime, serial, steps),
+  previewAutomationImport: () => ipcRenderer.invoke('automation:import-preview'),
+  commitAutomationImport: (token: string) => ipcRenderer.invoke('automation:import-commit', token),
+  exportAutomation: (automation: AutomationMacro) => ipcRenderer.invoke('automation:export', automation),
+  preflightBatch: (runtime: RuntimeConfig, request: BatchPreflightRequest) =>
+    ipcRenderer.invoke('batch:preflight', runtime, request),
+  startBatch: (runtime: RuntimeConfig, token: string, passingOnly: boolean, confirmedDangerous: boolean) =>
+    ipcRenderer.invoke('batch:start', runtime, token, passingOnly, confirmedDangerous),
+  cancelBatch: (runId: string) => ipcRenderer.invoke('batch:cancel', runId),
   getDeviceOverview: (runtime: RuntimeConfig, serial: string) => ipcRenderer.invoke('device:overview', runtime, serial),
   pushFiles: (runtime: RuntimeConfig, serials: string[], target: string, conflict: FileConflictPolicy) =>
     ipcRenderer.invoke('device:push-files', runtime, serials, target, conflict),
@@ -105,6 +113,11 @@ const api: ScrcpyApi = {
     const listener = (_event: Electron.IpcRendererEvent, progress: BatchProgressEvent): void => callback(progress)
     ipcRenderer.on('batch:progress', listener)
     return () => ipcRenderer.removeListener('batch:progress', listener)
+  },
+  onBatchRun: (callback: (event: BatchRunEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, runEvent: BatchRunEvent): void => callback(runEvent)
+    ipcRenderer.on('batch:run-event', listener)
+    return () => ipcRenderer.removeListener('batch:run-event', listener)
   }
 }
 

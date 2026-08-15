@@ -1,7 +1,9 @@
 import type {
+  AutomationMacro,
   AutomationStep,
   AudioCodec,
   AudioSource,
+  BatchPreflightRequest,
   CameraFacing,
   CommandPreviewRequest,
   DeviceControlAction,
@@ -27,6 +29,8 @@ const MAX_EXTRA_ARGS_LENGTH = 65_536
 const MAX_EXTRA_ARGS = 200
 const MAX_AUTOMATION_STEPS = 200
 const MAX_AUTOMATION_DURATION_MS = 30 * 60 * 1000
+const PACKAGE_ID = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/
+const SAFE_INPUT_TEXT = /^[\p{L}\p{N} .,_@%+\-/:?=]*$/u
 
 const orientations = new Set<Orientation>(['0', '90', '180', '270'])
 const recordOrientations = new Set<RecordOrientation>(['default', '0', '90', '180', '270'])
@@ -240,16 +244,158 @@ export function commandPreviewRequests(value: unknown): CommandPreviewRequest[] 
 }
 
 export function automationSteps(value: unknown): AutomationStep[] {
-  if (!Array.isArray(value) || value.length > MAX_AUTOMATION_STEPS) {
-    throw new TypeError(`automation steps must contain 0 to ${MAX_AUTOMATION_STEPS} actions.`)
+  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_AUTOMATION_STEPS) {
+    throw new TypeError(`automation steps must contain 1 to ${MAX_AUTOMATION_STEPS} actions.`)
   }
   let totalDuration = 0
-  const steps = value.map((item, index) => {
+  const steps = value.flatMap((item, index): AutomationStep[] => {
     const source = record(item, `steps[${index}]`)
-    const delayMs = finiteNumber(source.delayMs, `steps[${index}].delayMs`, 0, 60_000)
-    totalDuration += delayMs
-    return { action: controlAction(source.action), delayMs }
+    if (source.type === undefined && source.action !== undefined) {
+      const delayMs = finiteNumber(source.delayMs, `steps[${index}].delayMs`, 0, 60_000)
+      totalDuration += delayMs
+      return [
+        ...(delayMs ? [{ type: 'delay' as const, durationMs: delayMs }] : []),
+        { type: 'control', action: controlAction(source.action) }
+      ]
+    }
+    switch (source.type) {
+      case 'delay': {
+        const durationMs = finiteNumber(source.durationMs, `steps[${index}].durationMs`, 0, 60_000)
+        totalDuration += durationMs
+        return [{ type: 'delay', durationMs }]
+      }
+      case 'control':
+        return [{ type: 'control', action: controlAction(source.action) }]
+      case 'tap':
+        return [{
+          type: 'tap',
+          x: finiteNumber(source.x, `steps[${index}].x`, 0, 1),
+          y: finiteNumber(source.y, `steps[${index}].y`, 0, 1),
+          coordinateSpace: enumValue(source.coordinateSpace, `steps[${index}].coordinateSpace`, new Set(['normalized' as const]))
+        }]
+      case 'swipe': {
+        const from = record(source.from, `steps[${index}].from`)
+        const to = record(source.to, `steps[${index}].to`)
+        const durationMs = finiteNumber(source.durationMs, `steps[${index}].durationMs`, 1, 10_000)
+        totalDuration += durationMs
+        return [{
+          type: 'swipe',
+          from: { x: finiteNumber(from.x, `steps[${index}].from.x`, 0, 1), y: finiteNumber(from.y, `steps[${index}].from.y`, 0, 1) },
+          to: { x: finiteNumber(to.x, `steps[${index}].to.x`, 0, 1), y: finiteNumber(to.y, `steps[${index}].to.y`, 0, 1) },
+          durationMs,
+          coordinateSpace: enumValue(source.coordinateSpace, `steps[${index}].coordinateSpace`, new Set(['normalized' as const]))
+        }]
+      }
+      case 'text': {
+        const text = boundedString(source.value, `steps[${index}].value`, 512)
+        if (!SAFE_INPUT_TEXT.test(text)) throw new TypeError(`steps[${index}].value contains characters unsafe for Android input text.`)
+        if (source.sensitive !== false) throw new TypeError('Sensitive text cannot be persisted in an automation.')
+        return [{ type: 'text', value: text, sensitive: false }]
+      }
+      case 'start-app': {
+        const packageId = boundedString(source.packageId, `steps[${index}].packageId`, 255)
+        if (!PACKAGE_ID.test(packageId)) throw new TypeError(`steps[${index}].packageId is invalid.`)
+        return [{ type: 'start-app', packageId }]
+      }
+      case 'screenshot':
+        return [{
+          type: 'screenshot',
+          label: source.label === undefined ? undefined : boundedString(source.label, `steps[${index}].label`, 80, true)
+        }]
+      case 'assert-device': {
+        const condition = record(source.condition, `steps[${index}].condition`)
+        if (condition.type === 'orientation') {
+          return [{
+            type: 'assert-device',
+            condition: { type: 'orientation', value: enumValue(condition.value, `steps[${index}].condition.value`, new Set(['portrait' as const, 'landscape' as const])) }
+          }]
+        }
+        if (condition.type === 'aspect-ratio') {
+          return [{
+            type: 'assert-device',
+            condition: {
+              type: 'aspect-ratio',
+              value: finiteNumber(condition.value, `steps[${index}].condition.value`, 0.1, 10),
+              tolerance: finiteNumber(condition.tolerance, `steps[${index}].condition.tolerance`, 0, 1)
+            }
+          }]
+        }
+        throw new TypeError(`steps[${index}].condition.type is not supported.`)
+      }
+      default:
+        throw new TypeError(`steps[${index}].type is not supported.`)
+    }
   })
+  if (steps.length > MAX_AUTOMATION_STEPS) throw new TypeError(`automation steps expand beyond ${MAX_AUTOMATION_STEPS} actions.`)
   if (totalDuration > MAX_AUTOMATION_DURATION_MS) throw new TypeError('automation duration may not exceed 30 minutes.')
   return steps
+}
+
+export function automationMacro(value: unknown, name = 'automation'): AutomationMacro {
+  const source = record(value, name)
+  const design = source.design === undefined ? {} : record(source.design, `${name}.design`)
+  const orientation = design.orientation === undefined
+    ? 'any'
+    : enumValue(design.orientation, `${name}.design.orientation`, new Set(['any' as const, 'portrait' as const, 'landscape' as const]))
+  return {
+    id: boundedString(source.id, `${name}.id`, 128),
+    name: boundedString(source.name, `${name}.name`, 128),
+    description: source.description === undefined ? '' : boundedString(source.description, `${name}.description`, 1_024, true),
+    schemaVersion: 2,
+    design: {
+      orientation,
+      aspectRatio: design.aspectRatio === undefined ? 0 : finiteNumber(design.aspectRatio, `${name}.design.aspectRatio`, 0, 10)
+    },
+    steps: automationSteps(source.steps)
+  }
+}
+
+export function batchPreflightRequest(value: unknown): BatchPreflightRequest {
+  const source = record(value, 'batch preflight')
+  const serials = deviceSerials(source.serials, 100)
+  const concurrencyLimit = finiteNumber(source.concurrencyLimit, 'batch preflight concurrencyLimit', 1, 8)
+  if (!Number.isInteger(concurrencyLimit)) throw new TypeError('batch preflight concurrencyLimit must be an integer.')
+  const action = record(source.action, 'batch preflight action')
+  switch (action.type) {
+    case 'launch': {
+      const launches = deviceLaunches(action.launches)
+      const requested = new Set(serials)
+      const launchSerials = new Set(launches.map((item) => item.serial))
+      if (launches.length !== serials.length || launchSerials.size !== serials.length || launches.some((item) => !requested.has(item.serial))) {
+        throw new TypeError('Batch launch plans must contain exactly one launch for every requested device.')
+      }
+      return { serials, concurrencyLimit, action: { type: 'launch', launches } }
+    }
+    case 'control':
+      return { serials, concurrencyLimit, action: { type: 'control', action: controlAction(action.action) } }
+    case 'screenshot':
+      return { serials, concurrencyLimit, action: { type: 'screenshot' } }
+    case 'start-app': {
+      const packageId = boundedString(action.packageId, 'batch preflight packageId', 255)
+      if (!PACKAGE_ID.test(packageId)) throw new TypeError('batch preflight packageId is invalid.')
+      return { serials, concurrencyLimit, action: { type: 'start-app', packageId } }
+    }
+    case 'automation':
+      return { serials, concurrencyLimit, action: { type: 'automation', automation: automationMacro(action.automation) } }
+    case 'file-push': {
+      const target = boundedString(action.target, 'batch preflight target', 1_024).trim()
+      if (!target.startsWith('/') || /[\0\r\n\\]/.test(target) || target.split('/').some((part) => part === '.' || part === '..')) {
+        throw new TypeError('batch preflight target must be a safe absolute Android directory.')
+      }
+      if (action.conflict !== 'replace' && action.conflict !== 'skip') throw new TypeError('batch preflight file conflict policy is not supported.')
+      return { serials, concurrencyLimit, action: { type: 'file-push', target, conflict: action.conflict } }
+    }
+    case 'apk-install':
+      return {
+        serials,
+        concurrencyLimit,
+        action: {
+          type: 'apk-install',
+          replace: strictBoolean(action.replace, 'batch preflight replace existing app'),
+          downgrade: strictBoolean(action.downgrade, 'batch preflight allow downgrade')
+        }
+      }
+    default:
+      throw new TypeError('Batch action type is not supported.')
+  }
 }

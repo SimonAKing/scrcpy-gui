@@ -7,6 +7,12 @@
 - Model Camera, Virtual display, Record-only, Control-only, and OTG as validated launch scenes with official scrcpy 4.1 argv serialization, explicit conflicts, and portable Profile support.
 - Probe and cache each device's video/audio encoders, displays, cameras, declared sizes, high-speed frame rates, facing, and zoom range with bounded partial-failure reporting.
 - Configure all six launch scenes in a responsive guided workspace, including capability-backed Camera/Virtual display/Record-only controls, output preflight, and a separate no-ADB OTG preview/launch path.
+- Save device groups with a default launch profile, description, stable device membership, and an explicit 1–8 target concurrency limit.
+- Inspect launch, screenshot, app-start, safe control, file-push, APK-install, and Automation V2 batches in a per-device preflight table before execution.
+- Build Automation V2 macros from bounded delay, control, normalized tap/swipe, non-sensitive text, app-start, screenshot, and device-assertion steps without accepting raw shell.
+- Preview imported automations as untrusted documents, require an explicit review before saving, and keep sensitive text out of persisted macros.
+- Cancel active automation batches with an abort signal, stop scheduling later steps, retain step-level events, and persist partial per-device run reports in the artifact library.
+- Require explicit confirmation for multi-device input, remote-file overwrite, and APK downgrade batches.
 
 ## 2.0.0-beta.6
 

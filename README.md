@@ -122,7 +122,9 @@ Save the current Settings as a named launch profile, then assign a profile to ea
 
 Choose a target in the control panel to click Back, Home, recent apps, Menu, volume, power, screen power, rotation, and touch-indicator controls without memorizing scrcpy shortcuts. **Screenshot** uses `adb exec-out screencap` and validates the PNG before saving it to the computer.
 
-Choose **Record actions**, use the control buttons, then stop and save the sequence. Replay preserves the recorded delays and is limited to the predefined ADB actions; arbitrary shell commands are never stored or executed.
+Choose **Record actions**, use the control buttons, then stop and save the sequence. The Automations page can also build normalized tap/swipe, non-sensitive text, app-start, screenshot, delay, control, and device-assertion steps. Imported automations open as untrusted previews; arbitrary shell commands and persisted sensitive text are rejected.
+
+Save selected devices as a Device group with a default launch profile and concurrency limit. Before launching, controlling, taking screenshots, pushing files, installing an APK, starting an app, or running an automation, the batch view shows online/authorization state, capabilities, session conflicts, target geometry, and the exact planned action for every device. Failed preflight items stay visible, partial runs never report overall success, and input/overwrite/downgrade actions require confirmation. Active automation runs can be canceled and their per-device reports are saved in Artifacts.
 
 ### Recording
 

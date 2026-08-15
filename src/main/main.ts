@@ -2,10 +2,10 @@ import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, n
 import { basename, extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, stat } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { arch, homedir, platform, release } from 'node:os'
 import type {
-  AutomationStep,
+  BatchPreflightRequest,
   BatchProgressEvent,
   DeviceControlAction,
   DeviceLaunch,
@@ -29,7 +29,6 @@ import {
   listScrcpySessions,
   listTrackedDevices,
   pairDevice,
-  runDeviceAutomation,
   startScrcpy,
   startOtg,
   startDeviceTracker,
@@ -43,7 +42,8 @@ import {
   setDeviceTrackerVisibility
 } from './processes'
 import {
-  automationSteps,
+  automationMacro,
+  batchPreflightRequest,
   boundedString,
   commandPreviewRequests,
   controlAction,
@@ -65,6 +65,9 @@ import { ArtifactService } from './artifactService'
 import { diagnosticsService, type DiagnosticContext, type PreparedDiagnostics } from './diagnosticsService'
 import { profileTransferService } from './profileTransferService'
 import { deviceCapabilityService } from './deviceCapabilityService'
+import { AutomationRunner } from './automationRunner'
+import { BatchAutomationService, type PreparedBatchResource } from './batchAutomationService'
+import { automationTransferService } from './automationTransferService'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -97,7 +100,7 @@ function assertTrustedIpcSender(event: Electron.IpcMainInvokeEvent): void {
 }
 
 function domainForChannel(channel: string): 'runtime' | 'device' | 'session' | 'config' | 'automation' | 'artifact' {
-  if (channel.includes('automation')) return 'automation'
+  if (channel.includes('automation') || channel.startsWith('batch:')) return 'automation'
   if (channel.includes('screenshot') || channel.startsWith('dialog:record') || channel.startsWith('artifact:') || channel.startsWith('diagnostics:')) return 'artifact'
   if (channel.startsWith('device:')) return 'device'
   if (channel.startsWith('session:') || channel.startsWith('scrcpy:')) return 'session'
@@ -301,6 +304,79 @@ function sendBatchProgress(progress: BatchProgressEvent): void {
     data: { batchId: progress.batchId, targetId: progress.targetId, size: progress.size }
   })
 }
+
+async function captureIndexedScreenshot(
+  runtime: RuntimeConfig,
+  serial: string,
+  label?: string
+): Promise<{ message: string; artifactId?: string }> {
+  const safeSerial = serial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
+  const safeLabel = label?.trim().replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 60)
+  const timestamp = new Date().toISOString().replaceAll(':', '-').slice(0, 19)
+  const directory = join(app.getPath('pictures'), 'Scrcpy GUI')
+  await mkdir(directory, { recursive: true })
+  const path = join(directory, `scrcpy-${safeSerial}-${safeLabel ? `${safeLabel}-` : ''}${timestamp}-${randomUUID().slice(0, 8)}.png`)
+  const capture = await captureDeviceScreenshot(runtime, serial, path)
+  if (!capture.ok) throw new Error(capture.error?.detail || capture.error?.message || 'Screenshot failed.')
+  const artifact = artifactService ? await artifactService.register({ kind: 'screenshot', path, deviceId: serial }) : undefined
+  if (artifact) eventStore.publish({
+    level: 'info', domain: 'artifact', action: 'screenshot-indexed', deviceId: serial,
+    stage: artifact.status, message: 'Screenshot added to the artifact library.',
+    data: { artifactId: artifact.id, size: artifact.size }
+  })
+  return { message: `Screenshot saved to ${path}.`, artifactId: artifact?.id }
+}
+
+const automationRunner = new AutomationRunner({
+  control: controlDevice,
+  startApp: (runtime, serial, packageId) => deviceWorkspaceService.startApp(runtime, serial, packageId),
+  screenshot: captureIndexedScreenshot
+})
+
+const batchAutomationService = new BatchAutomationService({
+  devices: listTrackedDevices,
+  sessions: listScrcpySessions,
+  launch: startScrcpy,
+  control: controlDevice,
+  screenshot: captureIndexedScreenshot,
+  startApp: (runtime, serial, packageId) => deviceWorkspaceService.startApp(runtime, serial, packageId),
+  pushFiles: (runtime, serials, files, target, conflict) =>
+    deviceWorkspaceService.pushFiles(runtime, serials, files, target, conflict, sendBatchProgress),
+  installApk: (runtime, serials, file, replace, downgrade) =>
+    deviceWorkspaceService.installApk(runtime, serials, file, replace, downgrade, sendBatchProgress),
+  automationRunner
+})
+
+batchAutomationService.subscribe((event) => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('batch:run-event', event)
+  eventStore.publish({
+    level: event.status === 'target-failure' || event.status === 'step-failure' ? 'error'
+      : event.status === 'canceled' || event.report?.state === 'partial' ? 'warn'
+        : event.status === 'step-start' || event.status === 'step-success' ? 'debug' : 'info',
+    domain: 'automation', action: `batch-${event.status}`, deviceId: event.targetId,
+    stage: event.stepType || event.report?.state || event.status, message: event.message,
+    data: {
+      runId: event.runId,
+      actionType: event.actionType,
+      stepIndex: event.stepIndex,
+      ...(event.report ? {
+        state: event.report.state,
+        total: event.report.results.length,
+        succeeded: event.report.results.filter((item) => item.ok).length
+      } : {})
+    }
+  })
+  if (event.report) {
+    void artifactService?.registerBatchRunReport(event.report).then((artifact) => eventStore.publish({
+      level: 'info', domain: 'artifact', action: 'batch-report-indexed', stage: artifact.status,
+      message: 'Batch run report added to the artifact library.',
+      data: { artifactId: artifact.id, runId: event.runId, actionType: event.actionType }
+    })).catch((error) => eventStore.publish({
+      level: 'error', domain: 'artifact', action: 'batch-report-index-failed', stage: 'artifact-index',
+      message: error instanceof Error ? error.message : String(error), data: { runId: event.runId }
+    }))
+  }
+})
 
 async function selectedFiles(paths: string[], extensions?: Set<string>): Promise<SelectedLocalFile[]> {
   if (paths.length < 1 || paths.length > 50) throw new TypeError('Select 1 to 50 files.')
@@ -621,6 +697,108 @@ handle('profile:import-commit', (
     return failureFromUnknown(error, 'PROFILE_IMPORT_COMMIT_FAILED', 'profile-import-commit', 'Unable to import the profile.')
   }
 })
+handle('automation:export', async (_event, value: unknown) => {
+  try {
+    const automation = automationMacro(value, 'automation export')
+    const safeName = automation.name.trim().replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'automation'
+    const destination = await dialog.showSaveDialog({
+      title: 'Export automation',
+      defaultPath: join(app.getPath('documents'), `${safeName}.scrcpy-automation.json`),
+      filters: [{ name: 'Scrcpy GUI automation', extensions: ['json'] }]
+    })
+    if (destination.canceled || !destination.filePath) {
+      return operationFailure('AUTOMATION_EXPORT_CANCELED', 'automation-export', 'Automation export canceled.')
+    }
+    await writeFile(destination.filePath, automationTransferService.serialize(automation, app.getVersion()), { encoding: 'utf8', mode: 0o600 })
+    return { ok: true, data: destination.filePath }
+  } catch (error) {
+    return failureFromUnknown(error, 'AUTOMATION_EXPORT_FAILED', 'automation-export', 'Unable to export the automation.')
+  }
+})
+handle('automation:import-preview', async () => {
+  try {
+    const selection = await dialog.showOpenDialog({
+      title: 'Import automation', properties: ['openFile'],
+      filters: [{ name: 'Scrcpy GUI automation', extensions: ['json'] }]
+    })
+    if (selection.canceled || !selection.filePaths[0]) {
+      return operationFailure('AUTOMATION_IMPORT_CANCELED', 'automation-import-preview', 'Automation import canceled.')
+    }
+    const info = await stat(selection.filePaths[0])
+    if (!info.isFile() || info.size > 2 * 1024 * 1024) throw new TypeError('Automation file must be a regular file no larger than 2 MiB.')
+    return { ok: true, data: automationTransferService.preview(await readFile(selection.filePaths[0], 'utf8')) }
+  } catch (error) {
+    return failureFromUnknown(error, 'AUTOMATION_IMPORT_PREVIEW_FAILED', 'automation-import-preview', 'Unable to preview the automation import.')
+  }
+})
+handle('automation:import-commit', (_event, token: string) => {
+  try {
+    return { ok: true, data: automationTransferService.commit(boundedString(token, 'automation import token', 128)) }
+  } catch (error) {
+    return failureFromUnknown(error, 'AUTOMATION_IMPORT_COMMIT_FAILED', 'automation-import-commit', 'Unable to import the automation.')
+  }
+})
+handle('batch:preflight', async (_event, runtime: RuntimeConfig, rawRequest: BatchPreflightRequest) => {
+  try {
+    const validatedRuntime = runtimeConfig(runtime)
+    const request = batchPreflightRequest(rawRequest)
+    const environment = await getEnvironment(validatedRuntime)
+    let resource: PreparedBatchResource | undefined
+    if (request.action.type === 'file-push') {
+      request.action.target = validateRemoteDirectory(request.action.target)
+      const selection = await dialog.showOpenDialog({ title: 'Choose files for batch preflight', properties: ['openFile', 'multiSelections'] })
+      if (selection.canceled || !selection.filePaths.length) {
+        return operationFailure('FILE_SELECTION_CANCELED', 'batch-preflight', 'Batch file selection canceled.')
+      }
+      resource = { kind: 'file-push', files: await selectedFiles(selection.filePaths) }
+    } else if (request.action.type === 'apk-install') {
+      const selection = await dialog.showOpenDialog({
+        title: 'Choose an APK for batch preflight', properties: ['openFile'],
+        filters: [{ name: 'Android package', extensions: ['apk'] }]
+      })
+      if (selection.canceled || !selection.filePaths[0]) {
+        return operationFailure('APK_SELECTION_CANCELED', 'batch-preflight', 'Batch APK selection canceled.')
+      }
+      const [file] = await selectedFiles([selection.filePaths[0]], new Set(['.apk']))
+      resource = { kind: 'apk-install', file }
+    }
+    return {
+      ok: true,
+      data: await batchAutomationService.preflight(validatedRuntime, request, environment.scrcpy.capabilities, resource)
+    }
+  } catch (error) {
+    return failureFromUnknown(error, 'BATCH_PREFLIGHT_FAILED', 'batch-preflight', 'Unable to inspect the batch plan.', {
+      retryable: true,
+      suggestedActions: ['Refresh device state and inspect the batch again.']
+    })
+  }
+})
+handle('batch:start', async (
+  _event,
+  runtime: RuntimeConfig,
+  token: string,
+  passingOnly: boolean,
+  confirmedDangerous: boolean
+) => {
+  const validatedRuntime = runtimeConfig(runtime)
+  const validatedToken = boundedString(token, 'batch preflight token', 128)
+  const onlyPassing = strictBoolean(passingOnly, 'only passing targets')
+  const confirmed = strictBoolean(confirmedDangerous, 'dangerous batch confirmation')
+  if (confirmed) {
+    const choice = await dialog.showMessageBox(mainWindow!, {
+      type: 'warning',
+      title: 'Run confirmed batch on multiple devices?',
+      message: 'This batch contains an explicitly confirmed input, overwrite, or downgrade action.',
+      detail: 'Review every target in the preflight table. The action may change application state or replace data on all passing devices.',
+      buttons: ['Cancel', 'Run confirmed batch'], defaultId: 0, cancelId: 0, noLink: true
+    })
+    if (choice.response !== 1) return operationFailure('BATCH_CONFIRMATION_CANCELED', 'batch-start', 'Batch execution canceled.')
+  }
+  return batchAutomationService.start(validatedRuntime, validatedToken, onlyPassing, confirmed)
+})
+handle('batch:cancel', (_event, runId: string) =>
+  batchAutomationService.cancel(boundedString(runId, 'batch run id', 128))
+)
 handle('system:environment', (_event, runtime: RuntimeConfig) => getEnvironment(runtimeConfig(runtime)))
 handle('capability:device-probe', async (_event, runtime: RuntimeConfig, serial: string, refresh = false) => {
   try {
@@ -738,11 +916,6 @@ handle('device:screenshot', async (_event, runtime: RuntimeConfig, serial: strin
   }
   return capture
 })
-handle(
-  'device:automation',
-  (_event, runtime: RuntimeConfig, serial: string, steps: AutomationStep[]) =>
-    runDeviceAutomation(runtimeConfig(runtime), deviceSerial(serial), automationSteps(steps))
-)
 handle('device:overview', async (_event, runtime: RuntimeConfig, serial: string) => {
   try {
     return { ok: true, data: await deviceWorkspaceService.overview(runtimeConfig(runtime), availableDeviceSerial(serial)) }
@@ -873,6 +1046,7 @@ app.whenReady().then(() => {
 app.on('before-quit', (event) => {
   isQuitting = true
   globalShortcut.unregisterAll()
+  batchAutomationService.stopAll()
   stopAllScrcpy()
   stopDeviceTracker()
   if (killAdbOnQuit && !shutdownStarted) {

@@ -9,6 +9,7 @@ import type {
   ConfigMigrationReport,
   ConfigSaveResult,
   DeviceGroup,
+  DeviceGroupView,
   KnownDevice,
   LaunchProfile,
   JsonValue,
@@ -18,7 +19,7 @@ import type {
   WirelessTarget
 } from '../shared/types'
 import { configView, defaultPersistedConfig, legacyConfigView } from '../shared/config'
-import { automationSteps, boundedString, launchConfig, runtimeConfig, strictBoolean } from './ipcValidation'
+import { automationMacro, boundedString, launchConfig, runtimeConfig, strictBoolean } from './ipcValidation'
 import { validateDeviceAddress } from './scrcpy'
 import { failureFromUnknown, operationFailure } from '../shared/errors'
 
@@ -116,11 +117,22 @@ function wirelessTarget(value: unknown, name: string): WirelessTarget {
 }
 
 function automation(value: unknown, name: string): AutomationMacro {
+  return automationMacro(value, name)
+}
+
+function groupView(value: unknown, name: string): DeviceGroupView {
   const source = object(value, name)
+  const concurrencyLimit = source.concurrencyLimit === undefined ? 3 : integer(source.concurrencyLimit, `${name}.concurrencyLimit`, 1)
+  if (concurrencyLimit > 8) throw new TypeError(`${name}.concurrencyLimit may not exceed 8.`)
   return {
     id: boundedString(source.id, `${name}.id`, 128),
     name: boundedString(source.name, `${name}.name`, 128),
-    steps: automationSteps(source.steps)
+    serials: array(source.serials, `${name}.serials`).map((item, index) => boundedString(item, `${name}.serials[${index}]`, 512)),
+    defaultProfileId: source.defaultProfileId === undefined || source.defaultProfileId === ''
+      ? undefined
+      : boundedString(source.defaultProfileId, `${name}.defaultProfileId`, 128),
+    concurrencyLimit,
+    description: source.description === undefined ? '' : boundedString(source.description, `${name}.description`, 1_024, true)
   }
 }
 
@@ -131,12 +143,18 @@ export function validatePersistedConfig(value: unknown): PersistedConfig {
   assertUnique(profiles, (item) => item.id, 'config.profiles')
   const wirelessTargets = array(source.wirelessTargets, 'config.wirelessTargets').map((item, index) => wirelessTarget(item, `config.wirelessTargets[${index}]`))
   const automations = array(source.automations, 'config.automations').map((item, index) => automation(item, `config.automations[${index}]`))
+  const groups = array(source.groups, 'config.groups').map((item, index) => groupView(item, `config.groups[${index}]`))
   assertUnique(wirelessTargets, (item) => item.id, 'config.wirelessTargets')
   assertUnique(automations, (item) => item.id, 'config.automations')
+  assertUnique(groups, (item) => item.id, 'config.groups')
   const profileIds = new Set(profiles.map((item) => item.id))
   const deviceProfiles = stringRecord(source.deviceProfiles, 'config.deviceProfiles') as Record<string, string>
   for (const profileId of Object.values(deviceProfiles)) {
     if (profileId && !profileIds.has(profileId)) throw new TypeError('config.deviceProfiles references an unknown profile.')
+  }
+  for (const group of groups) {
+    if (group.defaultProfileId && !profileIds.has(group.defaultProfileId)) throw new TypeError('config.groups references an unknown profile.')
+    if (new Set(group.serials).size !== group.serials.length) throw new TypeError('config.groups contains duplicate device serials.')
   }
   return {
     runtime: runtimeConfig(source.runtime),
@@ -146,6 +164,7 @@ export function validatePersistedConfig(value: unknown): PersistedConfig {
     deviceAliases: stringRecord(source.deviceAliases, 'config.deviceAliases') as Record<string, string>,
     wirelessTargets,
     automations,
+    groups,
     locale: configLocale,
     muteNotifications: strictBoolean(source.muteNotifications, 'config.muteNotifications'),
     minimizeToTray: strictBoolean(source.minimizeToTray, 'config.minimizeToTray'),
@@ -202,6 +221,7 @@ function safeLegacyConfig(value: unknown, fallbackLocale: Locale): { config: Per
       deviceAliases: accept(() => stringRecord(candidate.deviceAliases, 'legacy.deviceAliases') as Record<string, string>, {}),
       wirelessTargets: dedupe(acceptItems(candidate.wirelessTargets, (item, index) => wirelessTarget(item, `legacy.wirelessTargets[${index}]`)), (item) => item.id),
       automations: dedupe(acceptItems(candidate.automations, (item, index) => automation(item, `legacy.automations[${index}]`)), (item) => item.id),
+      groups: dedupe(acceptItems(candidate.groups, (item, index) => groupView(item, `legacy.groups[${index}]`)), (item) => item.id),
       locale: locale(candidate.locale, fallbackLocale),
       muteNotifications: accept(() => strictBoolean(candidate.muteNotifications, 'legacy.muteNotifications'), defaults.muteNotifications),
       minimizeToTray: accept(() => strictBoolean(candidate.minimizeToTray, 'legacy.minimizeToTray'), defaults.minimizeToTray),
@@ -223,6 +243,7 @@ function configFromView(view: PersistedConfig, revision: number, previous: AppCo
   const previousDevices = new Map(previous?.knownDevices.map((device) => [device.lastSerial, device]) || [])
   const serials = new Set([
     ...Object.keys(view.deviceAliases), ...Object.keys(view.deviceProfiles), ...Object.keys(view.autoLaunchDevices),
+    ...view.groups.flatMap((group) => group.serials),
     ...(previous?.knownDevices.map((device) => device.lastSerial) || [])
   ])
   const knownDevices: KnownDevice[] = [...serials].map((serial) => {
@@ -235,6 +256,20 @@ function configFromView(view: PersistedConfig, revision: number, previous: AppCo
       firstSeenAt: existing?.firstSeenAt || now, lastSeenAt: existing?.lastSeenAt || now
     }
   })
+  const idBySerial = new Map(knownDevices.map((device) => [device.lastSerial, device.id]))
+  const groups: DeviceGroup[] = view.groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    deviceIds: group.serials.map((serial) => idBySerial.get(serial)).filter(Boolean) as string[],
+    defaultProfileId: group.defaultProfileId,
+    concurrencyLimit: group.concurrencyLimit,
+    description: group.description
+  }))
+  const groupIdsByDevice = new Map<string, string[]>()
+  for (const group of groups) {
+    for (const id of group.deviceIds) groupIdsByDevice.set(id, [...(groupIdsByDevice.get(id) || []), group.id])
+  }
+  for (const device of knownDevices) device.groupIds = groupIdsByDevice.get(device.id) || []
   return {
     schemaVersion: 3, revision, locale: view.locale,
     appearance: { muteNotifications: view.muteNotifications },
@@ -245,7 +280,7 @@ function configFromView(view: PersistedConfig, revision: number, previous: AppCo
     },
     shortcuts: { bossKeyEnabled: view.bossKeyEnabled, bossKeyAccelerator: view.bossKeyAccelerator },
     knownDevices, profiles: structuredClone(view.profiles), wirelessTargets: structuredClone(view.wirelessTargets),
-    automations: structuredClone(view.automations), groups: structuredClone(previous?.groups || [])
+    automations: structuredClone(view.automations), groups
   }
 }
 
@@ -265,9 +300,14 @@ function knownDevice(value: unknown, name: string): KnownDevice {
 
 function group(value: unknown, name: string): DeviceGroup {
   const source = object(value, name)
+  const concurrencyLimit = source.concurrencyLimit === undefined ? 3 : integer(source.concurrencyLimit, `${name}.concurrencyLimit`, 1)
+  if (concurrencyLimit > 8) throw new TypeError(`${name}.concurrencyLimit may not exceed 8.`)
   return {
     id: boundedString(source.id, `${name}.id`, 128), name: boundedString(source.name, `${name}.name`, 128),
-    deviceIds: array(source.deviceIds, `${name}.deviceIds`).map((item, index) => boundedString(item, `${name}.deviceIds[${index}]`, 128))
+    deviceIds: array(source.deviceIds, `${name}.deviceIds`).map((item, index) => boundedString(item, `${name}.deviceIds[${index}]`, 128)),
+    defaultProfileId: source.defaultProfileId === undefined ? undefined : boundedString(source.defaultProfileId, `${name}.defaultProfileId`, 128),
+    concurrencyLimit,
+    description: source.description === undefined ? '' : boundedString(source.description, `${name}.description`, 1_024, true)
   }
 }
 
@@ -299,6 +339,8 @@ export function validateAppConfigV3(value: unknown): AppConfigV3 {
     if (device.groupIds.some((id) => !groupIds.has(id))) throw new TypeError('A known device references an unknown group.')
   }
   if (groups.some((item) => item.deviceIds.some((id) => !deviceIds.has(id)))) throw new TypeError('A group references an unknown device.')
+  if (groups.some((item) => item.defaultProfileId && !profileIds.has(item.defaultProfileId))) throw new TypeError('A group references an unknown profile.')
+  if (groups.some((item) => new Set(item.deviceIds).size !== item.deviceIds.length)) throw new TypeError('A group contains duplicate devices.')
   return {
     schemaVersion: 3, revision: integer(source.revision, 'configV3.revision'), locale: configLocale,
     appearance: { muteNotifications: strictBoolean(appearance.muteNotifications, 'configV3.appearance.muteNotifications') },

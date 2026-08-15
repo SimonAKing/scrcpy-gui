@@ -36,7 +36,10 @@ function context(events: AppEvent[] = []): DiagnosticContext {
   const config = defaultPersistedConfig('en')
   config.runtime.scrcpyPath = '/Users/alice/Tools/scrcpy'
   config.wirelessTargets.push({ id: 'target-1', name: 'Phone', address: 'phone.local:37099', autoConnect: false })
-  config.automations.push({ id: 'macro-1', name: 'Sensitive macro', steps: [{ action: 'home', delayMs: 0 }] })
+  config.automations.push({
+    id: 'macro-1', name: 'Safe macro', description: '', schemaVersion: 2,
+    design: { orientation: 'any', aspectRatio: 0 }, steps: [{ type: 'control', action: 'home' }]
+  })
   return {
     generatedAt: '2026-08-15T12:00:00.000Z', appVersion: '2.0.0-beta.5', electronVersion: '43.4.0', nodeVersion: '24.0.0',
     platform: 'darwin', release: '25.0.0', arch: 'arm64', homePath: '/Users/alice',

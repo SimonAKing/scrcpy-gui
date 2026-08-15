@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, toRaw, watch } from 'vue'
 import type {
+  AutomationImportPreview,
   AutomationMacro,
   AutomationStep,
   AppEvent,
@@ -9,12 +10,17 @@ import type {
   ApkInstallResult,
   ArtifactKind,
   ArtifactRecord,
+  BatchAction,
   BatchItemResult,
+  BatchPreflight,
   BatchProgressEvent,
+  BatchRunEvent,
+  BatchRunReport,
   CapabilitySnapshot,
   CommandPreview,
   Device,
   DeviceControlAction,
+  DeviceGroupView,
   DeviceCapabilitySnapshot,
   DeviceOverview,
   DeviceTrackerEvent,
@@ -39,7 +45,7 @@ import { defaultPersistedConfig, legacyConfigView } from '../shared/config'
 import { operationErrorMessage } from '../shared/errors'
 import { translate } from './i18n'
 
-type Tab = 'devices' | 'sessions' | 'artifacts' | 'settings' | 'logs'
+type Tab = 'devices' | 'automations' | 'sessions' | 'artifacts' | 'settings' | 'logs'
 type SettingsSection = 'general' | 'video' | 'controls' | 'recording' | 'geometry' | 'advanced'
 type WorkspaceSection = 'overview' | 'control' | 'apps' | 'files'
 type ToastKind = 'success' | 'error' | 'info'
@@ -134,6 +140,38 @@ const recordingAutomation = ref(false)
 const recordedSteps = ref<AutomationStep[]>([])
 const automationName = ref('')
 const replayingAutomation = ref('')
+const groupName = ref('')
+const groupDescription = ref('')
+const groupProfileId = ref('')
+const groupConcurrency = ref(3)
+const editingGroupId = ref('')
+const selectedGroupId = ref('')
+const batchActionType = ref<BatchAction['type']>('launch')
+const batchControlAction = ref<DeviceControlAction>('home')
+const batchPackageId = ref('')
+const batchAutomationId = ref('')
+const batchPreflight = ref<BatchPreflight | null>(null)
+const batchPassingOnly = ref(true)
+const batchDangerousConfirmed = ref(false)
+const batchBusy = ref(false)
+const activeBatchRunId = ref('')
+const batchRunEvents = ref<BatchRunEvent[]>([])
+const batchRunReport = ref<BatchRunReport | null>(null)
+const automationImportPreview = ref<AutomationImportPreview | null>(null)
+const automationImportConfirmed = ref(false)
+const automationTransferBusy = ref(false)
+const automationDraft = ref<AutomationMacro>({
+  id: '', name: '', description: '', schemaVersion: 2,
+  design: { orientation: 'any', aspectRatio: 0 }, steps: []
+})
+const newStepType = ref<AutomationStep['type']>('control')
+const newStepControl = ref<DeviceControlAction>('home')
+const newStepNumberA = ref(0.5)
+const newStepNumberB = ref(0.5)
+const newStepNumberC = ref(0.8)
+const newStepNumberD = ref(0.8)
+const newStepDuration = ref(300)
+const newStepText = ref('')
 const logs = ref<AppEvent[]>([])
 const logLevel = ref<AppEventLevel | 'all'>('all')
 const logDomain = ref<AppEventDomain | 'all'>('all')
@@ -144,6 +182,7 @@ let removeSessionListener: (() => void) | undefined
 let removeDeviceListener: (() => void) | undefined
 let removeAppEventListener: (() => void) | undefined
 let removeBatchProgressListener: (() => void) | undefined
+let removeBatchRunListener: (() => void) | undefined
 let lastRecordedActionAt = 0
 let configRevision = 0
 let configReady = false
@@ -171,6 +210,13 @@ const workspaceTargets = computed(() => {
   const selected = selectedSerials.value.filter((serial) => available.has(serial))
   return selected.length ? selected : controlSerial.value ? [controlSerial.value] : []
 })
+const selectedGroup = computed(() => config.groups.find((group) => group.id === selectedGroupId.value))
+const batchTargetSerials = computed(() => {
+  const group = selectedGroup.value
+  return group ? [...group.serials] : [...selectedSerials.value]
+})
+const batchAutomation = computed(() => config.automations.find((automation) => automation.id === batchAutomationId.value))
+const passingBatchTargets = computed(() => batchPreflight.value?.items.filter((item) => item.eligible).length || 0)
 const visibleApps = computed(() => {
   const query = appSearch.value.trim().toLocaleLowerCase()
   return installedApps.value.filter((item) => item.launchable && (showSystemApps.value || !item.system) &&
@@ -261,6 +307,15 @@ watch(
 watch(
   [selectedSerials, () => config.launch, () => config.profiles, () => config.deviceProfiles, () => config.deviceAliases],
   () => { commandPreviews.value = [] },
+  { deep: true }
+)
+
+watch(
+  [selectedGroupId, batchActionType, batchControlAction, batchPackageId, batchAutomationId, () => config.groups, () => config.automations],
+  () => {
+    batchPreflight.value = null
+    batchDangerousConfirmed.value = false
+  },
   { deep: true }
 )
 
@@ -801,12 +856,16 @@ function updateProfile(profile: LaunchProfile): void {
 }
 
 function deleteProfile(id: string): void {
-  const references = Object.values(config.deviceProfiles).filter((profileId) => profileId === id).length
+  const references = Object.values(config.deviceProfiles).filter((profileId) => profileId === id).length +
+    config.groups.filter((group) => group.defaultProfileId === id).length
   if (references && !window.confirm(`${references} ${t('confirmDeleteReferencedProfile')}`)) return
   const index = config.profiles.findIndex((profile) => profile.id === id)
   if (index >= 0) config.profiles.splice(index, 1)
   for (const [serial, profileId] of Object.entries(config.deviceProfiles)) {
     if (profileId === id) delete config.deviceProfiles[serial]
+  }
+  for (const group of config.groups) {
+    if (group.defaultProfileId === id) group.defaultProfileId = undefined
   }
 }
 
@@ -891,7 +950,8 @@ async function sendControlAction(action: DeviceControlAction): Promise<void> {
   }
   if (recordingAutomation.value) {
     const delayMs = lastRecordedActionAt ? Math.min(60_000, actionAt - lastRecordedActionAt) : 0
-    recordedSteps.value.push({ action, delayMs })
+    if (delayMs) recordedSteps.value.push({ type: 'delay', durationMs: delayMs })
+    recordedSteps.value.push({ type: 'control', action })
     lastRecordedActionAt = actionAt
   }
 }
@@ -923,7 +983,11 @@ function saveAutomation(): void {
     toast('error', t('automationEmpty'))
     return
   }
-  const macro: AutomationMacro = { id: newId(), name, steps: structuredClone(toRaw(recordedSteps.value)) }
+  const macro: AutomationMacro = {
+    id: newId(), name, description: '', schemaVersion: 2,
+    design: { orientation: 'any', aspectRatio: 0 },
+    steps: structuredClone(toRaw(recordedSteps.value))
+  }
   config.automations.push(macro)
   recordedSteps.value = []
   automationName.value = ''
@@ -932,16 +996,288 @@ function saveAutomation(): void {
 
 async function replayAutomation(macro: AutomationMacro): Promise<void> {
   if (!controlSerial.value || replayingAutomation.value) return
-  replayingAutomation.value = macro.id
-  const result = await window.scrcpy.runAutomation(runtimeSnapshot(), controlSerial.value, structuredClone(toRaw(macro.steps)))
-  replayingAutomation.value = ''
-  if (!result.ok) toast('error', operationErrorMessage(result, t('operationFailed')))
-  else toast('success', t('automationComplete'))
+  selectedSerials.value = [controlSerial.value]
+  selectedGroupId.value = ''
+  batchActionType.value = 'automation'
+  batchAutomationId.value = macro.id
+  activeTab.value = 'automations'
+  await inspectBatch()
 }
 
 function deleteAutomation(id: string): void {
   const index = config.automations.findIndex((macro) => macro.id === id)
   if (index >= 0) config.automations.splice(index, 1)
+}
+
+function resetGroupForm(): void {
+  editingGroupId.value = ''
+  groupName.value = ''
+  groupDescription.value = ''
+  groupProfileId.value = ''
+  groupConcurrency.value = 3
+}
+
+function saveGroup(): void {
+  const name = groupName.value.trim()
+  const existing = config.groups.find((group) => group.id === editingGroupId.value)
+  const connected = new Set(devices.value.map((device) => device.serial))
+  const unavailableMembers = existing?.serials.filter((serial) => !connected.has(serial)) || []
+  const members = [...new Set([...selectedSerials.value, ...unavailableMembers])]
+  if (!name || !members.length) {
+    toast('error', t('groupNameAndDevicesRequired'))
+    return
+  }
+  const group: DeviceGroupView = {
+    id: editingGroupId.value || newId(),
+    name,
+    description: groupDescription.value.trim(),
+    serials: members,
+    defaultProfileId: groupProfileId.value || undefined,
+    concurrencyLimit: Math.max(1, Math.min(8, Math.trunc(groupConcurrency.value || 3)))
+  }
+  const index = config.groups.findIndex((item) => item.id === group.id)
+  if (index >= 0) config.groups[index] = group
+  else config.groups.push(group)
+  selectedGroupId.value = group.id
+  resetGroupForm()
+  toast('success', t('groupSaved'))
+}
+
+function editGroup(group: DeviceGroupView): void {
+  editingGroupId.value = group.id
+  groupName.value = group.name
+  groupDescription.value = group.description
+  groupProfileId.value = group.defaultProfileId || ''
+  groupConcurrency.value = group.concurrencyLimit
+  selectedSerials.value = group.serials.filter((serial) => devices.value.some((device) => device.serial === serial))
+}
+
+function selectGroup(group: DeviceGroupView): void {
+  selectedGroupId.value = group.id
+  const online = new Set(devices.value.map((device) => device.serial))
+  selectedSerials.value = group.serials.filter((serial) => online.has(serial))
+  const first = group.serials.find((serial) => online.has(serial))
+  if (first) controlSerial.value = first
+}
+
+function deleteGroup(id: string): void {
+  const index = config.groups.findIndex((group) => group.id === id)
+  if (index >= 0) config.groups.splice(index, 1)
+  if (selectedGroupId.value === id) selectedGroupId.value = ''
+  if (editingGroupId.value === id) resetGroupForm()
+}
+
+function removeGroupMember(group: DeviceGroupView, serial: string): void {
+  const index = group.serials.indexOf(serial)
+  if (index >= 0) group.serials.splice(index, 1)
+  if (selectedGroupId.value === group.id) selectedSerials.value = selectedSerials.value.filter((item) => item !== serial)
+}
+
+function createAutomation(): void {
+  automationDraft.value = {
+    id: '', name: '', description: '', schemaVersion: 2,
+    design: { orientation: 'any', aspectRatio: 0 }, steps: []
+  }
+}
+
+function editAutomation(macro: AutomationMacro): void {
+  automationDraft.value = structuredClone(toRaw(macro))
+  activeTab.value = 'automations'
+}
+
+function automationStepLabel(step: AutomationStep): string {
+  if (step.type === 'control') return actionLabel(step.action)
+  if (step.type === 'delay') return `${t('delay')} · ${step.durationMs} ms`
+  if (step.type === 'tap') return `${t('tap')} · ${step.x.toFixed(2)}, ${step.y.toFixed(2)}`
+  if (step.type === 'swipe') return `${t('swipe')} · ${step.from.x.toFixed(2)},${step.from.y.toFixed(2)} → ${step.to.x.toFixed(2)},${step.to.y.toFixed(2)}`
+  if (step.type === 'text') return `${t('textInput')} · ${step.value}`
+  if (step.type === 'start-app') return `${t('startApp')} · ${step.packageId}`
+  if (step.type === 'screenshot') return `${t('screenshot')} · ${step.label || t('automatic')}`
+  return `${t('assertDevice')} · ${step.condition.type}`
+}
+
+function addAutomationStep(): void {
+  let step: AutomationStep
+  if (newStepType.value === 'control') step = { type: 'control', action: newStepControl.value }
+  else if (newStepType.value === 'delay') step = { type: 'delay', durationMs: Math.max(0, Math.min(60_000, Math.trunc(newStepDuration.value))) }
+  else if (newStepType.value === 'tap') step = {
+    type: 'tap', x: Math.max(0, Math.min(1, newStepNumberA.value)), y: Math.max(0, Math.min(1, newStepNumberB.value)), coordinateSpace: 'normalized'
+  }
+  else if (newStepType.value === 'swipe') step = {
+    type: 'swipe',
+    from: { x: Math.max(0, Math.min(1, newStepNumberA.value)), y: Math.max(0, Math.min(1, newStepNumberB.value)) },
+    to: { x: Math.max(0, Math.min(1, newStepNumberC.value)), y: Math.max(0, Math.min(1, newStepNumberD.value)) },
+    durationMs: Math.max(1, Math.min(10_000, Math.trunc(newStepDuration.value || 300))), coordinateSpace: 'normalized'
+  }
+  else if (newStepType.value === 'text') {
+    if (!newStepText.value.trim()) return toast('error', t('stepValueRequired'))
+    step = { type: 'text', value: newStepText.value, sensitive: false }
+  } else if (newStepType.value === 'start-app') {
+    if (!newStepText.value.trim()) return toast('error', t('stepValueRequired'))
+    step = { type: 'start-app', packageId: newStepText.value.trim() }
+  } else if (newStepType.value === 'screenshot') {
+    step = { type: 'screenshot', label: newStepText.value.trim() || undefined }
+  } else {
+    step = {
+      type: 'assert-device',
+      condition: { type: 'orientation', value: newStepText.value === 'landscape' ? 'landscape' : 'portrait' }
+    }
+  }
+  if (automationDraft.value.steps.length >= 200) return toast('error', t('automationTooLarge'))
+  automationDraft.value.steps.push(step)
+  newStepText.value = ''
+}
+
+function moveAutomationStep(index: number, direction: -1 | 1): void {
+  const target = index + direction
+  if (target < 0 || target >= automationDraft.value.steps.length) return
+  const [step] = automationDraft.value.steps.splice(index, 1)
+  automationDraft.value.steps.splice(target, 0, step)
+}
+
+function removeAutomationStep(index: number): void {
+  automationDraft.value.steps.splice(index, 1)
+}
+
+function saveAutomationDraft(): void {
+  const draft = structuredClone(toRaw(automationDraft.value))
+  draft.name = draft.name.trim()
+  draft.description = draft.description.trim()
+  if (!draft.name || !draft.steps.length) return toast('error', t('automationNameAndStepsRequired'))
+  draft.id ||= newId()
+  draft.schemaVersion = 2
+  const index = config.automations.findIndex((item) => item.id === draft.id)
+  if (index >= 0) config.automations[index] = draft
+  else config.automations.push(draft)
+  automationDraft.value = structuredClone(draft)
+  toast('success', t('automationSaved'))
+}
+
+async function previewAutomationImport(): Promise<void> {
+  automationTransferBusy.value = true
+  const result = await window.scrcpy.previewAutomationImport()
+  automationTransferBusy.value = false
+  if (!result.ok || !result.data) {
+    if (result.error?.code !== 'AUTOMATION_IMPORT_CANCELED') toast('error', operationErrorMessage(result, t('automationImportFailed')))
+    return
+  }
+  automationImportPreview.value = result.data
+  automationImportConfirmed.value = false
+}
+
+async function commitAutomationImport(): Promise<void> {
+  if (!automationImportPreview.value || !automationImportConfirmed.value) return
+  automationTransferBusy.value = true
+  const result = await window.scrcpy.commitAutomationImport(automationImportPreview.value.token)
+  automationTransferBusy.value = false
+  if (!result.ok || !result.data) return toast('error', operationErrorMessage(result, t('automationImportFailed')))
+  const imported = structuredClone(result.data)
+  if (config.automations.some((item) => item.id === imported.id)) {
+    imported.id = newId()
+    imported.name = `${imported.name} (${t('copy')})`
+  }
+  config.automations.push(imported)
+  automationImportPreview.value = null
+  automationImportConfirmed.value = false
+  toast('success', t('automationImported'))
+}
+
+async function exportAutomation(macro: AutomationMacro): Promise<void> {
+  automationTransferBusy.value = true
+  const result = await window.scrcpy.exportAutomation(structuredClone(toRaw(macro)))
+  automationTransferBusy.value = false
+  if (!result.ok && result.error?.code !== 'AUTOMATION_EXPORT_CANCELED') toast('error', operationErrorMessage(result, t('automationExportFailed')))
+}
+
+function launchForBatch(serial: string): LaunchConfig {
+  const group = selectedGroup.value
+  const profile = group?.defaultProfileId ? config.profiles.find((item) => item.id === group.defaultProfileId) : undefined
+  if (!profile) return launchSnapshot(serial)
+  const launch = structuredClone(toRaw(profile.launch))
+  const alias = config.deviceAliases[serial]?.trim()
+  if (alias && !launch.windowTitle.trim()) launch.windowTitle = alias
+  return launch
+}
+
+function buildBatchAction(): BatchAction | undefined {
+  if (batchActionType.value === 'launch') {
+    const launches = batchTargetSerials.value.map((serial) => ({ serial, launch: launchForBatch(serial) }))
+    if (launches.some((item) => item.launch.scene === 'otg')) {
+      toast('error', t('batchOtgUnsupported'))
+      return
+    }
+    return { type: 'launch', launches }
+  }
+  if (batchActionType.value === 'control') return { type: 'control', action: batchControlAction.value }
+  if (batchActionType.value === 'screenshot') return { type: 'screenshot' }
+  if (batchActionType.value === 'file-push') {
+    if (!fileTarget.value.trim()) {
+      toast('error', t('targetDirectoryRequired'))
+      return
+    }
+    return { type: 'file-push', target: fileTarget.value.trim(), conflict: fileConflict.value }
+  }
+  if (batchActionType.value === 'apk-install') {
+    return { type: 'apk-install', replace: installReplace.value, downgrade: installDowngrade.value }
+  }
+  if (batchActionType.value === 'start-app') {
+    if (!batchPackageId.value.trim()) {
+      toast('error', t('packageIdRequired'))
+      return
+    }
+    return { type: 'start-app', packageId: batchPackageId.value.trim() }
+  }
+  if (!batchAutomation.value) {
+    toast('error', t('chooseAutomation'))
+    return
+  }
+  return { type: 'automation', automation: structuredClone(toRaw(batchAutomation.value)) }
+}
+
+async function inspectBatch(): Promise<void> {
+  if (!batchTargetSerials.value.length) return toast('error', t('chooseBatchTargets'))
+  const action = buildBatchAction()
+  if (!action) return
+  batchBusy.value = true
+  batchRunReport.value = null
+  batchRunEvents.value = []
+  const result = await window.scrcpy.preflightBatch(runtimeSnapshot(), {
+    serials: batchTargetSerials.value,
+    action,
+    concurrencyLimit: selectedGroup.value?.concurrencyLimit || 3
+  })
+  batchBusy.value = false
+  if (!result.ok || !result.data) return toast('error', operationErrorMessage(result, t('batchPreflightFailed')))
+  batchPreflight.value = result.data
+  batchDangerousConfirmed.value = false
+}
+
+async function runBatch(): Promise<void> {
+  if (!batchPreflight.value || activeBatchRunId.value) return
+  batchBusy.value = true
+  const result = await window.scrcpy.startBatch(
+    runtimeSnapshot(), batchPreflight.value.token, batchPassingOnly.value, batchDangerousConfirmed.value
+  )
+  batchBusy.value = false
+  if (!result.ok || !result.data) return toast('error', operationErrorMessage(result, t('batchStartFailed')))
+  activeBatchRunId.value = result.data
+  batchPreflight.value = null
+}
+
+async function cancelBatch(): Promise<void> {
+  if (!activeBatchRunId.value) return
+  const result = await window.scrcpy.cancelBatch(activeBatchRunId.value)
+  if (!result.ok) toast('error', operationErrorMessage(result, t('batchCancelFailed')))
+}
+
+function handleBatchRun(event: BatchRunEvent): void {
+  batchRunEvents.value.push(event)
+  if (batchRunEvents.value.length > 500) batchRunEvents.value.splice(0, batchRunEvents.value.length - 500)
+  if (event.report) {
+    batchRunReport.value = event.report
+    activeBatchRunId.value = ''
+    toast(event.report.state === 'completed' ? 'success' : 'info', event.message)
+  }
 }
 
 async function applyBossKey(notify = false): Promise<void> {
@@ -1057,6 +1393,7 @@ onMounted(async () => {
   removeDeviceListener = window.scrcpy.onDevices((event) => void handleDeviceEvent(event))
   removeAppEventListener = window.scrcpy.onEvent(handleAppEvent)
   removeBatchProgressListener = window.scrcpy.onBatchProgress(handleBatchProgress)
+  removeBatchRunListener = window.scrcpy.onBatchRun(handleBatchRun)
   const historicalEvents = await window.scrcpy.listEvents({ limit: 1_000 })
   const liveEventIds = new Set(logs.value.map((event) => event.id))
   logs.value.unshift(...historicalEvents.filter((event) => !liveEventIds.has(event.id)))
@@ -1086,6 +1423,7 @@ onBeforeUnmount(() => {
   removeDeviceListener?.()
   removeAppEventListener?.()
   removeBatchProgressListener?.()
+  removeBatchRunListener?.()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
@@ -1098,7 +1436,7 @@ onBeforeUnmount(() => {
         <span><strong>Scrcpy GUI</strong><small>v{{ version }}</small></span>
       </button>
       <nav class="tabs" aria-label="Main navigation">
-        <button v-for="tab in (['devices', 'sessions', 'artifacts', 'settings', 'logs'] as Tab[])" :key="tab" :class="{ active: activeTab === tab }" @click="activeTab = tab">
+        <button v-for="tab in (['devices', 'automations', 'sessions', 'artifacts', 'settings', 'logs'] as Tab[])" :key="tab" :class="{ active: activeTab === tab }" @click="activeTab = tab">
           {{ t(tab) }}
           <span v-if="tab === 'logs' && logs.length" class="count">{{ logs.length }}</span>
           <span v-else-if="tab === 'sessions' && sessions.filter(sessionIsActive).length" class="count">{{ sessions.filter(sessionIsActive).length }}</span>
@@ -1367,6 +1705,27 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
+        <section class="panel groups-panel">
+          <div class="panel-title">
+            <div><p class="eyebrow">M4</p><h2>{{ t('deviceGroups') }}</h2><p class="muted">{{ t('deviceGroupsHint') }}</p></div>
+            <span class="group-selection-count">{{ selectedSerials.length }} {{ t('selected') }}</span>
+          </div>
+          <div class="group-editor">
+            <label><span>{{ t('groupName') }}</span><input v-model.trim="groupName" maxlength="128" /></label>
+            <label><span>{{ t('description') }}</span><input v-model.trim="groupDescription" maxlength="1024" /></label>
+            <label><span>{{ t('defaultProfile') }}</span><select v-model="groupProfileId"><option value="">{{ t('perDeviceOrGlobal') }}</option><option v-for="profile in config.profiles" :key="profile.id" :value="profile.id">{{ profile.name }} · {{ t(`scene_${profile.launch.scene}`) }}</option></select></label>
+            <label><span>{{ t('concurrencyLimit') }}</span><input v-model.number="groupConcurrency" type="number" min="1" max="8" /></label>
+            <div class="button-row"><button class="secondary" @click="saveGroup">{{ editingGroupId ? t('updateGroup') : t('saveGroup') }}</button><button v-if="editingGroupId" class="ghost" @click="resetGroupForm">{{ t('cancel') }}</button></div>
+          </div>
+          <div v-if="config.groups.length" class="group-list">
+            <article v-for="group in config.groups" :key="group.id" :class="['group-card', { active: selectedGroupId === group.id }]">
+              <div><strong>{{ group.name }}</strong><small>{{ group.serials.length }} {{ t('devices').toLowerCase() }} · {{ t('concurrency') }} {{ group.concurrencyLimit }}<template v-if="group.defaultProfileId"> · {{ config.profiles.find(profile => profile.id === group.defaultProfileId)?.name }}</template></small><p v-if="group.description">{{ group.description }}</p></div>
+              <div class="group-serials"><span v-for="serial in group.serials" :key="serial"><code>{{ config.deviceAliases[serial] || serial }}</code><button type="button" :aria-label="`${t('delete')} ${serial}`" @click="removeGroupMember(group, serial)">×</button></span></div>
+              <div class="button-row"><button class="secondary compact" @click="selectGroup(group)">{{ t('useGroup') }}</button><button class="ghost compact" @click="editGroup(group)">{{ t('edit') }}</button><button class="ghost compact" @click="deleteGroup(group.id)">{{ t('delete') }}</button></div>
+            </article>
+          </div>
+        </section>
+
         <section class="panel wireless-panel">
           <div class="panel-title"><div><p class="eyebrow">{{ t('wireless') }}</p><p class="muted">{{ t('wirelessHint') }}</p></div></div>
           <div class="wireless-grid">
@@ -1381,6 +1740,103 @@ onBeforeUnmount(() => {
               <div class="button-row nowrap"><button class="secondary compact" :disabled="!environment?.adb.ok" @click="connectSaved(target)">{{ t('connect') }}</button><button class="ghost compact" @click="forgetWirelessTarget(target.id)">{{ t('delete') }}</button></div>
             </div>
           </div>
+        </section>
+      </template>
+
+      <template v-else-if="activeTab === 'automations'">
+        <section class="automations-header">
+          <div><p class="eyebrow">M4 · {{ t('safeAutomation') }}</p><h1>{{ t('automations') }}</h1><p class="muted">{{ t('automationsHintV2') }}</p></div>
+          <div class="button-row"><button class="secondary" :disabled="automationTransferBusy" @click="previewAutomationImport">{{ t('import') }}</button><button class="ghost" @click="createAutomation">{{ t('newAutomation') }}</button></div>
+        </section>
+
+        <section v-if="automationImportPreview" class="panel automation-import-preview">
+          <div class="panel-title"><div><p class="eyebrow">{{ t('untrustedImport') }}</p><h2>{{ automationImportPreview.automation.name }}</h2><p class="muted">{{ automationImportPreview.automation.steps.length }} {{ t('steps') }} · {{ automationImportPreview.dangerousStepCount }} {{ t('inputSteps') }}</p></div><span class="compatibility-badge warn">{{ t('reviewRequired') }}</span></div>
+          <p v-for="warning in automationImportPreview.warnings" :key="warning" class="inline-warning">{{ warning }}</p>
+          <ol class="import-step-list"><li v-for="(step, index) in automationImportPreview.automation.steps" :key="index"><code>{{ index + 1 }}</code><span>{{ automationStepLabel(step) }}</span></li></ol>
+          <label class="toggle warning-toggle"><input v-model="automationImportConfirmed" type="checkbox" /><span>{{ t('automationImportConfirmation') }}</span></label>
+          <div class="button-row"><button class="primary" :disabled="!automationImportConfirmed || automationTransferBusy" @click="commitAutomationImport">{{ t('importReviewedAutomation') }}</button><button class="ghost" @click="automationImportPreview = null">{{ t('cancel') }}</button></div>
+        </section>
+
+        <div class="automation-layout">
+          <section class="panel automation-editor">
+            <div class="panel-title"><div><p class="eyebrow">{{ t('automationEditor') }}</p><h2>{{ automationDraft.id ? t('editAutomation') : t('newAutomation') }}</h2></div><span>{{ automationDraft.steps.length }}/200</span></div>
+            <label><span>{{ t('automationName') }}</span><input v-model.trim="automationDraft.name" maxlength="128" /></label>
+            <label><span>{{ t('description') }}</span><textarea v-model.trim="automationDraft.description" rows="2" maxlength="1024"></textarea></label>
+            <div class="field-pair"><label><span>{{ t('designOrientation') }}</span><select v-model="automationDraft.design.orientation"><option value="any">{{ t('any') }}</option><option value="portrait">{{ t('portrait') }}</option><option value="landscape">{{ t('landscape') }}</option></select></label><label><span>{{ t('designAspectRatio') }}</span><input v-model.number="automationDraft.design.aspectRatio" type="number" min="0" max="10" step="0.001" /><small>{{ t('zeroMeansUnknown') }}</small></label></div>
+
+            <div class="step-builder">
+              <select v-model="newStepType"><option value="control">{{ t('control') }}</option><option value="delay">{{ t('delay') }}</option><option value="tap">{{ t('tap') }}</option><option value="swipe">{{ t('swipe') }}</option><option value="text">{{ t('textInput') }}</option><option value="start-app">{{ t('startApp') }}</option><option value="screenshot">{{ t('screenshot') }}</option><option value="assert-device">{{ t('assertDevice') }}</option></select>
+              <select v-if="newStepType === 'control'" v-model="newStepControl"><option v-for="action in controlActions" :key="action" :value="action">{{ actionLabel(action) }}</option></select>
+              <input v-else-if="newStepType === 'delay'" v-model.number="newStepDuration" type="number" min="0" max="60000" placeholder="ms" />
+              <template v-else-if="newStepType === 'tap'"><input v-model.number="newStepNumberA" type="number" min="0" max="1" step="0.01" placeholder="x 0..1" /><input v-model.number="newStepNumberB" type="number" min="0" max="1" step="0.01" placeholder="y 0..1" /></template>
+              <template v-else-if="newStepType === 'swipe'"><input v-model.number="newStepNumberA" type="number" min="0" max="1" step="0.01" placeholder="from x" /><input v-model.number="newStepNumberB" type="number" min="0" max="1" step="0.01" placeholder="from y" /><input v-model.number="newStepNumberC" type="number" min="0" max="1" step="0.01" placeholder="to x" /><input v-model.number="newStepNumberD" type="number" min="0" max="1" step="0.01" placeholder="to y" /><input v-model.number="newStepDuration" type="number" min="1" max="10000" placeholder="ms" /></template>
+              <select v-else-if="newStepType === 'assert-device'" v-model="newStepText"><option value="portrait">{{ t('portrait') }}</option><option value="landscape">{{ t('landscape') }}</option></select>
+              <input v-else v-model="newStepText" :placeholder="newStepType === 'start-app' ? 'com.example.app' : newStepType === 'text' ? t('nonSensitiveText') : t('optionalLabel')" />
+              <button class="secondary compact" @click="addAutomationStep">{{ t('addStep') }}</button>
+            </div>
+
+            <div v-if="automationDraft.steps.length" class="automation-step-list">
+              <div v-for="(step, index) in automationDraft.steps" :key="index" class="automation-step-row">
+                <span class="step-index">{{ index + 1 }}</span><div class="step-copy"><strong>{{ step.type }}</strong><small>{{ automationStepLabel(step) }}</small>
+                  <div class="step-inline-fields">
+                    <select v-if="step.type === 'control'" v-model="step.action"><option v-for="action in controlActions" :key="action" :value="action">{{ actionLabel(action) }}</option></select>
+                    <input v-else-if="step.type === 'delay'" v-model.number="step.durationMs" type="number" min="0" max="60000" />
+                    <template v-else-if="step.type === 'tap'"><input v-model.number="step.x" type="number" min="0" max="1" step="0.01" /><input v-model.number="step.y" type="number" min="0" max="1" step="0.01" /></template>
+                    <template v-else-if="step.type === 'swipe'"><input v-model.number="step.from.x" type="number" min="0" max="1" step="0.01" /><input v-model.number="step.from.y" type="number" min="0" max="1" step="0.01" /><input v-model.number="step.to.x" type="number" min="0" max="1" step="0.01" /><input v-model.number="step.to.y" type="number" min="0" max="1" step="0.01" /><input v-model.number="step.durationMs" type="number" min="1" max="10000" /></template>
+                    <input v-else-if="step.type === 'text'" v-model="step.value" :placeholder="t('nonSensitiveText')" />
+                    <input v-else-if="step.type === 'start-app'" v-model.trim="step.packageId" placeholder="com.example.app" />
+                    <input v-else-if="step.type === 'screenshot'" v-model.trim="step.label" :placeholder="t('optionalLabel')" />
+                    <template v-else-if="step.condition.type === 'orientation'"><select v-model="step.condition.value"><option value="portrait">{{ t('portrait') }}</option><option value="landscape">{{ t('landscape') }}</option></select></template>
+                    <template v-else><input v-model.number="step.condition.value" type="number" min="0.1" max="10" step="0.001" /><input v-model.number="step.condition.tolerance" type="number" min="0" max="1" step="0.01" /></template>
+                  </div>
+                </div>
+                <div class="button-row nowrap"><button class="ghost compact" :disabled="index === 0" @click="moveAutomationStep(index, -1)">↑</button><button class="ghost compact" :disabled="index === automationDraft.steps.length - 1" @click="moveAutomationStep(index, 1)">↓</button><button class="ghost compact" @click="removeAutomationStep(index)">{{ t('delete') }}</button></div>
+              </div>
+            </div>
+            <p v-else class="muted">{{ t('noAutomationSteps') }}</p>
+            <div class="button-row"><button class="primary" @click="saveAutomationDraft">{{ t('saveAutomation') }}</button><button class="ghost" @click="createAutomation">{{ t('clearEditor') }}</button></div>
+          </section>
+
+          <section class="panel automation-library">
+            <div class="panel-title"><div><p class="eyebrow">{{ t('automationLibrary') }}</p><h2>{{ config.automations.length }}</h2></div></div>
+            <div v-if="config.automations.length" class="saved-list">
+              <article v-for="macro in config.automations" :key="macro.id" class="saved-row automation-library-row">
+                <div><strong>{{ macro.name }}</strong><small>{{ macro.steps.length }} {{ t('steps') }} · {{ macro.design.orientation }}<template v-if="macro.design.aspectRatio"> · {{ macro.design.aspectRatio.toFixed(3) }}</template></small><p v-if="macro.description">{{ macro.description }}</p></div>
+                <div class="button-row"><button class="secondary compact" @click="editAutomation(macro)">{{ t('edit') }}</button><button class="ghost compact" :disabled="automationTransferBusy" @click="exportAutomation(macro)">{{ t('export') }}</button><button class="ghost compact" @click="deleteAutomation(macro.id)">{{ t('delete') }}</button></div>
+              </article>
+            </div>
+            <p v-else class="muted">{{ t('noAutomations') }}</p>
+          </section>
+        </div>
+
+        <section class="panel batch-console">
+          <div class="panel-title"><div><p class="eyebrow">{{ t('batchPreflight') }}</p><h2>{{ t('groupBatchRun') }}</h2><p class="muted">{{ t('batchRunHint') }}</p></div><span>{{ batchTargetSerials.length }} {{ t('targets') }}</span></div>
+          <div class="batch-plan-controls">
+            <label><span>{{ t('targetGroup') }}</span><select v-model="selectedGroupId"><option value="">{{ t('currentlySelectedDevices') }}</option><option v-for="group in config.groups" :key="group.id" :value="group.id">{{ group.name }} · {{ group.serials.length }}</option></select></label>
+            <label><span>{{ t('batchAction') }}</span><select v-model="batchActionType"><option value="launch">{{ t('launchSelected') }}</option><option value="screenshot">{{ t('screenshot') }}</option><option value="start-app">{{ t('startApp') }}</option><option value="control">{{ t('control') }}</option><option value="automation">{{ t('automation') }}</option><option value="file-push">{{ t('pushFiles') }}</option><option value="apk-install">{{ t('installApk') }}</option></select></label>
+            <label v-if="batchActionType === 'control'"><span>{{ t('controlAction') }}</span><select v-model="batchControlAction"><option v-for="action in controlActions" :key="action" :value="action">{{ actionLabel(action) }}</option></select></label>
+            <label v-else-if="batchActionType === 'start-app'"><span>{{ t('packageId') }}</span><input v-model.trim="batchPackageId" placeholder="com.example.app" /></label>
+            <label v-else-if="batchActionType === 'automation'"><span>{{ t('automation') }}</span><select v-model="batchAutomationId"><option value="">{{ t('chooseAutomation') }}</option><option v-for="macro in config.automations" :key="macro.id" :value="macro.id">{{ macro.name }} · {{ macro.steps.length }}</option></select></label>
+            <template v-else-if="batchActionType === 'file-push'"><label><span>{{ t('targetDirectory') }}</span><input v-model.trim="fileTarget" placeholder="/sdcard/Download/" /></label><label><span>{{ t('existingFile') }}</span><select v-model="fileConflict"><option value="replace">{{ t('replace') }}</option><option value="skip">{{ t('skip') }}</option></select></label></template>
+            <template v-else-if="batchActionType === 'apk-install'"><label class="toggle"><input v-model="installReplace" type="checkbox" /><span>{{ t('replaceExistingApp') }}</span></label><label class="toggle warning-toggle"><input v-model="installDowngrade" type="checkbox" /><span>{{ t('allowDowngrade') }}</span></label></template>
+            <button class="secondary" :disabled="batchBusy || !!activeBatchRunId" @click="inspectBatch">{{ t('inspectBatch') }}</button>
+          </div>
+
+          <div v-if="batchPreflight" class="preflight-table-wrap">
+            <table class="preflight-table"><thead><tr><th>{{ t('device') }}</th><th>{{ t('online') }}</th><th>{{ t('authorized') }}</th><th>{{ t('capability') }}</th><th>{{ t('sessionConflict') }}</th><th>{{ t('estimatedAction') }}</th></tr></thead><tbody><tr v-for="item in batchPreflight.items" :key="item.serial" :class="{ failed: !item.eligible }"><td><strong>{{ config.deviceAliases[item.serial] || item.serial }}</strong><small v-for="reason in item.reasons" :key="reason">{{ reason }}</small></td><td>{{ item.online ? t('yes') : t('no') }}</td><td>{{ item.authorized ? t('yes') : t('no') }}</td><td><span :class="['preflight-status', item.capability]">{{ item.capability }}</span></td><td>{{ item.sessionConflict ? t('yes') : t('no') }}</td><td>{{ item.estimatedAction }}</td></tr></tbody></table>
+            <div class="batch-confirmation">
+              <label class="toggle"><input v-model="batchPassingOnly" type="checkbox" /><span>{{ t('runPassingOnly') }} · {{ passingBatchTargets }}/{{ batchPreflight.items.length }}</span></label>
+              <label v-if="batchPreflight.confirmationRequired" class="toggle warning-toggle"><input v-model="batchDangerousConfirmed" type="checkbox" /><span>{{ t(`confirmBatch_${batchPreflight.confirmationKind || 'input'}`) }}</span></label>
+              <div class="button-row"><button class="primary" :disabled="batchBusy || !passingBatchTargets || batchPreflight.confirmationRequired && !batchDangerousConfirmed" @click="runBatch">{{ t('runBatch') }}</button><button class="ghost" @click="batchPreflight = null">{{ t('cancel') }}</button></div>
+            </div>
+          </div>
+
+          <div v-if="activeBatchRunId" class="active-batch"><span class="recording-dot" /><strong>{{ t('batchRunning') }}</strong><code>{{ activeBatchRunId }}</code><button class="danger compact" @click="cancelBatch">{{ t('cancelRun') }}</button></div>
+          <div v-if="batchRunReport" class="batch-report">
+            <div class="batch-report-summary"><strong>{{ t('runReport') }}</strong><span :class="['preflight-status', batchRunReport.state === 'completed' ? 'pass' : 'warning']">{{ batchRunReport.state }}</span><small>{{ batchRunReport.results.filter(result => result.ok).length }}/{{ batchRunReport.results.length }} {{ t('succeeded') }}</small></div>
+            <div class="batch-results"><div v-for="result in batchRunReport.results" :key="result.targetId" :class="['batch-result', result.ok ? 'ok' : 'failed']"><span><strong>{{ config.deviceAliases[result.targetId] || result.targetId }}</strong><small>{{ result.data?.actionType || batchRunReport.actionType }}</small></span><p>{{ result.data?.message || result.error?.message }}</p><details v-if="result.error?.detail"><summary>{{ t('errorDetails') }}</summary><code>{{ result.error.detail }}</code></details></div></div>
+          </div>
+          <details v-if="batchRunEvents.length" class="batch-event-log"><summary>{{ batchRunEvents.length }} {{ t('runEvents') }}</summary><div v-for="(event, index) in batchRunEvents" :key="`${event.runId}-${index}`"><time>{{ new Date(event.timestamp).toLocaleTimeString() }}</time><code>{{ event.targetId || event.runId }} · {{ event.status }} · {{ event.message }}</code></div></details>
         </section>
       </template>
 

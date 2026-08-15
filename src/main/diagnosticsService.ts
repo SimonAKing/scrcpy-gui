@@ -105,7 +105,8 @@ function configSummary(config: PersistedConfig | undefined): Record<string, unkn
       profiles: config.profiles.length,
       knownDeviceAliases: Object.keys(config.deviceAliases).length,
       wirelessTargets: config.wirelessTargets.length,
-      automations: config.automations.length
+      automations: config.automations.length,
+      deviceGroups: config.groups.length
     },
     settings: {
       minimizeToTray: config.minimizeToTray,

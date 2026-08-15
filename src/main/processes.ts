@@ -3,7 +3,6 @@ import { constants as fsConstants } from 'node:fs'
 import { access, stat, statfs, writeFile } from 'node:fs/promises'
 import { dirname, resolve as resolvePath } from 'node:path'
 import type {
-  AutomationStep,
   Device,
   DeviceControlAction,
   DeviceLaunch,
@@ -44,14 +43,6 @@ const CONTROL_KEYCODES: Partial<Record<DeviceControlAction, string>> = {
   'screen-on': 'KEYCODE_WAKEUP',
   'screen-off': 'KEYCODE_SLEEP'
 }
-const SPECIAL_CONTROL_ACTIONS = new Set<DeviceControlAction>([
-  'rotate',
-  'auto-rotate',
-  'screen-on',
-  'screen-off',
-  'show-touches-on',
-  'show-touches-off'
-])
 
 function firstVersionLine(output: string, prefix: string): string {
   return output
@@ -357,40 +348,6 @@ export async function captureDeviceScreenshot(
       suggestedActions: ['Confirm that the device is connected and unlocked.']
     })
   }
-}
-
-export async function runDeviceAutomation(
-  runtime: RuntimeConfig,
-  serial: string,
-  steps: AutomationStep[]
-): Promise<OperationResult<string>> {
-  if (!serial.trim()) return operationFailure('DEVICE_REQUIRED', 'validation', 'Choose a device first.')
-  if (!Array.isArray(steps) || steps.length === 0) {
-    return operationFailure('AUTOMATION_EMPTY', 'validation', 'The automation has no actions.')
-  }
-  if (steps.length > 200) {
-    return operationFailure('AUTOMATION_TOO_LARGE', 'validation', 'An automation may contain at most 200 actions.')
-  }
-  let totalDelay = 0
-  for (const step of steps) {
-    if (!CONTROL_KEYCODES[step.action] && !SPECIAL_CONTROL_ACTIONS.has(step.action)) {
-      return operationFailure('AUTOMATION_ACTION_UNSUPPORTED', 'validation', 'The automation contains an unsupported action.')
-    }
-    if (!Number.isFinite(step.delayMs) || step.delayMs < 0 || step.delayMs > 60_000) {
-      return operationFailure('AUTOMATION_DELAY_INVALID', 'validation', 'Each automation delay must be between 0 and 60 seconds.')
-    }
-    totalDelay += step.delayMs
-  }
-  if (totalDelay > 30 * 60_000) {
-    return operationFailure('AUTOMATION_DURATION_EXCEEDED', 'validation', 'Automation duration may not exceed 30 minutes.')
-  }
-
-  for (const step of steps) {
-    if (step.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, step.delayMs))
-    const result = await controlDevice(runtime, serial, step.action)
-    if (!result.ok) return result
-  }
-  return { ok: true, data: `Replayed ${steps.length} actions on ${serial}.` }
 }
 
 export function subscribeScrcpySessionEvents(listener: (event: ScrcpySessionEvent) => void): () => void {

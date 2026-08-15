@@ -10,7 +10,7 @@
 >
 > 维护者：Simon Ma 与 Scrcpy GUI contributors
 
-> 实施进度（2026-08-15）：M1 的 OptionDescriptor、CapabilityRegistry、命令预览、SessionManager、DeviceTracker、结构化事件/错误、Sessions 页面和 Config V3 已落地；M2 的设备工作区、文件推送、APK 安装、应用列表/启动、ArtifactService、脱敏诊断包、Issue helper 和 Profile 导入导出已落地；M3 的六类场景领域模型、官方 argv 序列化、场景冲突矩阵、Profile 往返、设备级编码器/显示/相机探测、响应式场景向导、输出预检和独立无 ADB OTG 流程已落地，真实 Camera/Virtual display/V4L2/OTG 硬件烟测仍待对应设备与平台。M0 的三平台真实设备矩阵、Chocolatey 社区审核和 Stable 验收仍待外部条件完成；M4 尚未开始。
+> 实施进度（2026-08-15）：M1 的 OptionDescriptor、CapabilityRegistry、命令预览、SessionManager、DeviceTracker、结构化事件/错误、Sessions 页面和 Config V3 已落地；M2 的设备工作区、文件推送、APK 安装、应用列表/启动、ArtifactService、脱敏诊断包、Issue helper 和 Profile 导入导出已落地；M3 的六类场景领域模型、官方 argv 序列化、场景冲突矩阵、Profile 往返、设备级编码器/显示/相机探测、响应式场景向导、输出预检和独立无 ADB OTG 流程已落地，真实 Camera/Virtual display/V4L2/OTG 硬件烟测仍待对应设备与平台。M4 的设备组、场景/组预设、批量预检、逐设备结果、Automation V2 编辑/导入预览/取消、并发控制、确认门槛和产物化 run report 已落地，并已通过 fake ADB、迁移、安全验证与 880/1120/1440 视口检查。M0 的三平台真实设备矩阵、Chocolatey 社区审核和 Stable 验收仍待外部条件完成。
 
 ## 0. 文档目的
 

@@ -87,6 +87,22 @@ describe('ArtifactService', () => {
     expect(contents).not.toContain('/local/')
   })
 
+  it('persists batch run reports with partial per-device outcomes', async () => {
+    const { store } = await service()
+    const artifact = await store.registerBatchRunReport({
+      id: 'run-1', actionType: 'automation', state: 'partial', canceled: false,
+      startedAt: now.toISOString(), completedAt: now.toISOString(),
+      results: [
+        { targetId: 'OK', ok: true, data: { serial: 'OK', actionType: 'automation', message: 'done', completedSteps: 2 } },
+        { targetId: 'FAIL', ok: false, error: { code: 'FAILED', stage: 'step', message: 'failed', retryable: true, suggestedActions: [] } }
+      ]
+    })
+    expect(artifact).toMatchObject({
+      kind: 'transfer-report', metadata: { operation: 'automation', state: 'partial', total: 2, succeeded: 1, failed: 1 }
+    })
+    expect(JSON.parse(await readFile(artifact.path, 'utf8'))).toMatchObject({ kind: 'batch-run', state: 'partial' })
+  })
+
   it('separates removing an index entry from permanently deleting its file', async () => {
     const { directory, store } = await service()
     const keptPath = join(directory, 'kept.png')

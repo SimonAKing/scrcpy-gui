@@ -7,6 +7,7 @@ import type {
   ArtifactRecord,
   ArtifactStatus,
   BatchOperationResult,
+  BatchRunReport,
   FileTransferResult,
   ApkInstallResult,
   ScrcpySession
@@ -159,6 +160,24 @@ export class ArtifactService {
         total: batch.results.length,
         succeeded: batch.results.filter((item) => item.ok).length,
         failed: batch.results.filter((item) => !item.ok).length
+      }
+    })
+  }
+
+  async registerBatchRunReport(report: BatchRunReport): Promise<ArtifactRecord> {
+    await this.load()
+    await mkdir(this.reportsDirectory, { recursive: true })
+    const path = join(this.reportsDirectory, `batch-${report.actionType}-${report.id}.json`)
+    await this.atomicFile(path, `${JSON.stringify({ schemaVersion: 1, kind: 'batch-run', ...report }, null, 2)}\n`)
+    return this.register({
+      kind: 'transfer-report', path,
+      metadata: {
+        operation: report.actionType,
+        state: report.state,
+        canceled: report.canceled,
+        total: report.results.length,
+        succeeded: report.results.filter((item) => item.ok).length,
+        failed: report.results.filter((item) => !item.ok).length
       }
     })
   }
