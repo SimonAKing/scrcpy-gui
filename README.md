@@ -189,6 +189,8 @@ The app uses Electron, Vue 3, TypeScript, Vite, and electron-builder. Main-proce
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Bug reports should include reproducible steps, platform and version details, plus the relevant Logs tab output.
 
+The proposed product direction, functional requirements, architecture, security boundaries, and implementation milestones are documented in the [Product and technical specification (Simplified Chinese)](docs/PRODUCT_TECHNICAL_SPEC.zh_CN.md).
+
 ## Community and credits
 
 - Questions, bugs, and feature requests: [GitHub Issues](https://github.com/SimonAKing/scrcpy-gui/issues)
