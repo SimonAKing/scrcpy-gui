@@ -7,6 +7,7 @@ import type {
   CommandPreview,
   Device,
   DeviceControlAction,
+  DeviceTrackerEvent,
   EnvironmentStatus,
   LaunchConfig,
   LaunchProfile,
@@ -87,15 +88,17 @@ const replayingAutomation = ref('')
 const logs = ref<ScrcpyStatusEvent[]>([])
 const toasts = ref<Toast[]>([])
 let toastId = 0
-let pollTimer: number | undefined
 let removeStatusListener: (() => void) | undefined
 let removeSessionListener: (() => void) | undefined
+let removeDeviceListener: (() => void) | undefined
 let lastRecordedActionAt = 0
 let configRevision = 0
 let configReady = false
 let configSaveInFlight = false
 let configSavePending = false
 const autoLaunchAttempted = new Set<string>()
+const trackerStatus = ref<DeviceTrackerEvent['status']>('stopped')
+const trackerSource = ref<DeviceTrackerEvent['source']>('track')
 
 const t = (key: string): string => translate(config.locale, key)
 const runtimeVersion = (binary: 'scrcpy' | 'adb'): string => {
@@ -202,6 +205,7 @@ async function chooseScrcpy(): Promise<void> {
   config.runtime.scrcpyPath = path
   await refreshEnvironment(true)
   await refreshDevices()
+  await startTrackingDevices()
 }
 
 async function refreshDevices(notifyError = false): Promise<void> {
@@ -214,7 +218,11 @@ async function refreshDevices(notifyError = false): Promise<void> {
     if (notifyError && result.error) toast('error', result.error)
     return
   }
-  devices.value = result.data || []
+  await applyDeviceSnapshot(result.data || [])
+}
+
+async function applyDeviceSnapshot(nextDevices: Device[]): Promise<void> {
+  devices.value = [...new Map(nextDevices.map((device) => [device.serial, device])).values()]
   const available = new Set(devices.value.map((device) => device.serial))
   selectedSerials.value = selectedSerials.value.filter((serial) => available.has(serial))
   for (const serial of autoLaunchAttempted) {
@@ -232,6 +240,26 @@ async function refreshDevices(notifyError = false): Promise<void> {
       if (!startResult.ok) toast('error', startResult.error || t('operationFailed'))
     }
   }
+}
+
+async function handleDeviceEvent(event: DeviceTrackerEvent): Promise<void> {
+  trackerStatus.value = event.status
+  trackerSource.value = event.source
+  if (event.status === 'tracking' && event.revision > 0) await applyDeviceSnapshot(event.devices)
+}
+
+async function startTrackingDevices(): Promise<void> {
+  const result = await window.scrcpy.trackDevices(runtimeSnapshot())
+  if (!result.ok) {
+    trackerStatus.value = 'error'
+    toast('error', result.error || t('trackerFailed'))
+    return
+  }
+  await applyDeviceSnapshot(result.data || [])
+}
+
+function handleVisibilityChange(): void {
+  void window.scrcpy.setDeviceTrackerVisibility(!document.hidden)
 }
 
 function toggleSelectAll(): void {
@@ -529,6 +557,9 @@ onMounted(async () => {
   version.value = await window.scrcpy.getVersion()
   removeStatusListener = window.scrcpy.onStatus(handleStatus)
   removeSessionListener = window.scrcpy.onSession(handleSession)
+  removeDeviceListener = window.scrcpy.onDevices((event) => void handleDeviceEvent(event))
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  handleVisibilityChange()
   const listedSessions = await window.scrcpy.listSessions()
   const liveIds = new Set(sessions.value.map((session) => session.id))
   sessions.value.push(...listedSessions.filter((session) => !liveIds.has(session.id)))
@@ -543,13 +574,14 @@ onMounted(async () => {
     }
   }
   await refreshDevices()
-  pollTimer = window.setInterval(refreshDevices, 3000)
+  await startTrackingDevices()
 })
 
 onBeforeUnmount(() => {
-  if (pollTimer) window.clearInterval(pollTimer)
   removeStatusListener?.()
   removeSessionListener?.()
+  removeDeviceListener?.()
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
@@ -605,7 +637,7 @@ onBeforeUnmount(() => {
 
       <template v-if="activeTab === 'devices'">
         <section class="section-heading">
-          <div><p class="eyebrow">{{ t('connectedDevices') }}</p><h1>{{ devices.length }} {{ t('devices').toLowerCase() }}</h1></div>
+          <div><p class="eyebrow">{{ t('connectedDevices') }}</p><h1>{{ devices.length }} {{ t('devices').toLowerCase() }}</h1><p class="tracker-summary">{{ t(`tracker_${trackerStatus}`) }} · {{ trackerSource === 'track' ? t('trackerLive') : t('trackerPolling') }}</p></div>
           <div class="button-row">
             <button class="ghost" :disabled="loadingDevices" @click="refreshDevices(true)">{{ t('refresh') }}</button>
             <button class="ghost" :disabled="!usableDevices.length" @click="toggleSelectAll">{{ t('selectAll') }}</button>
