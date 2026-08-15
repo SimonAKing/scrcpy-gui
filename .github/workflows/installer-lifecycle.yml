@@ -54,8 +54,12 @@ jobs:
           set -euo pipefail
           target='/Applications/Scrcpy GUI.app'
           active_mount=''
+          app_pid=''
 
           cleanup() {
+            if [[ -n "$app_pid" ]]; then
+              kill "$app_pid" 2>/dev/null || true
+            fi
             if [[ -n "$active_mount" ]]; then
               hdiutil detach "$active_mount" -quiet || true
             fi
@@ -82,6 +86,24 @@ jobs:
 
           "$target/Contents/Resources/scrcpy/scrcpy" --version | grep -E '^scrcpy 4\.1'
           "$target/Contents/Resources/scrcpy/adb" version | grep -E '^Android Debug Bridge version 1\.0\.41'
+
+          "$target/Contents/MacOS/Scrcpy GUI" --remote-debugging-port=9222 > renderer.stdout.log 2> renderer.stderr.log &
+          app_pid=$!
+          renderer_ready='false'
+          for _ in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:9222/json/list | grep -q '"url": "file:'; then
+              renderer_ready='true'
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$renderer_ready" != 'true' ]]; then
+            cat renderer.stdout.log renderer.stderr.log
+            exit 1
+          fi
+          kill "$app_pid"
+          wait "$app_pid" || true
+          app_pid=''
 
           sudo rm -rf '/Applications/Scrcpy GUI.app'
           test ! -e "$target"
@@ -163,6 +185,32 @@ jobs:
           if ((& $scrcpy --version | Select-Object -First 1) -notmatch '^scrcpy 4\.1') { throw 'Installed scrcpy version check failed.' }
           if ((& $adb version | Select-Object -First 1) -notmatch '^Android Debug Bridge version 1\.0\.41') { throw 'Installed adb version check failed.' }
 
+          $app = Join-Path $installLocation 'Scrcpy GUI.exe'
+          if (-not (Test-Path $app)) { throw 'Installed Scrcpy GUI executable is missing.' }
+          $appProcess = Start-Process -FilePath $app -ArgumentList '--remote-debugging-port=9222' -RedirectStandardOutput renderer.stdout.log -RedirectStandardError renderer.stderr.log -PassThru
+          try {
+            $rendererReady = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              try {
+                $pages = Invoke-RestMethod http://127.0.0.1:9222/json/list
+                if ($pages | Where-Object { $_.type -eq 'page' -and $_.url -like 'file:*' }) {
+                  $rendererReady = $true
+                  break
+                }
+              } catch {
+                # The debug endpoint is not listening yet.
+              }
+              Start-Sleep -Seconds 1
+            }
+            if (-not $rendererReady) {
+              Get-Content renderer.stdout.log, renderer.stderr.log -ErrorAction SilentlyContinue
+              throw 'Installed Renderer did not expose a loaded file page.'
+            }
+          } finally {
+            Stop-Process -Id $appProcess.Id -Force -ErrorAction SilentlyContinue
+            $appProcess.WaitForExit()
+          }
+
           if ($current.UninstallString -notmatch '^"([^"]+)"') { throw 'Could not parse the registered uninstaller.' }
           $uninstaller = $Matches[1]
           $process = Start-Process -FilePath $uninstaller -ArgumentList '/S' -PassThru -Wait
@@ -196,6 +244,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
+          sudo apt-get install --yes xvfb
           previous_deb="./downloads/Scrcpy.GUI-${PREVIOUS_VERSION}-linux-amd64.deb"
           current_deb="./downloads/Scrcpy.GUI-${CURRENT_VERSION}-linux-amd64.deb"
           previous_package_version="$(dpkg-deb --field "$previous_deb" Version)"
@@ -211,6 +260,24 @@ jobs:
           [[ -x "$runtime" && -x "$adb" ]]
           "$runtime" --version | grep -E '^scrcpy 4\.1'
           "$adb" version | grep -E '^Android Debug Bridge version 1\.0\.41'
+
+          xvfb-run -a scrcpy-gui --no-sandbox --remote-debugging-port=9222 > renderer.stdout.log 2> renderer.stderr.log &
+          app_pid=$!
+          renderer_ready='false'
+          for _ in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:9222/json/list | grep -q '"url": "file:'; then
+              renderer_ready='true'
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$renderer_ready" != 'true' ]]; then
+            cat renderer.stdout.log renderer.stderr.log
+            kill "$app_pid" 2>/dev/null || true
+            exit 1
+          fi
+          kill "$app_pid"
+          wait "$app_pid" || true
 
           sudo apt-get remove --yes scrcpy-gui
           status="$(dpkg-query -W -f='${db:Status-Status}' scrcpy-gui 2>/dev/null || true)"
