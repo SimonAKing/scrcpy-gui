@@ -80,7 +80,14 @@ export function splitExtraArgs(value: string): string[] {
   if (args.some((arg) => arg === '-s' || arg.startsWith('--serial'))) {
     throw new Error('Device serial is managed by Scrcpy GUI and cannot be overridden in extra arguments.')
   }
+  if (args.some((arg) => arg.includes('\0'))) throw new Error('Additional arguments may not contain null bytes.')
   return args
+}
+
+export function validatePortRange(value: string): boolean {
+  const ports = value.trim().split(':')
+  if (ports.length < 1 || ports.length > 2 || ports.some((port) => !validPort(port))) return false
+  return ports.length === 1 || Number(ports[0]) <= Number(ports[1])
 }
 
 function validatePair(name: string, width: number, height: number): void {
@@ -104,10 +111,15 @@ export function buildScrcpyArgs(config: LaunchConfig, serial: string): string[] 
   if (config.windowTitle.trim()) args.push(`--window-title=${config.windowTitle.trim()}`)
   if (config.shortcutModifier !== 'default') args.push(`--shortcut-mod=${config.shortcutModifier}`)
   if (config.keyboardMode !== 'default') args.push(`--keyboard=${config.keyboardMode}`)
+  if (config.mouseMode !== 'default') args.push(`--mouse=${config.mouseMode}`)
+  if (config.gamepadMode !== 'default') args.push(`--gamepad=${config.gamepadMode}`)
   if (config.videoCodec !== 'default') args.push(`--video-codec=${config.videoCodec}`)
   if (config.videoBitRate > 0 && config.videoBitRate !== 8) args.push(`--video-bit-rate=${config.videoBitRate}M`)
+  if (config.videoBuffer > 0) args.push(`--video-buffer=${Math.trunc(config.videoBuffer)}`)
+  if (config.audioBuffer > 0) args.push(`--audio-buffer=${Math.trunc(config.audioBuffer)}`)
   if (config.maxSize > 0) args.push(`--max-size=${Math.trunc(config.maxSize)}`)
   if (config.maxFps > 0) args.push(`--max-fps=${Math.trunc(config.maxFps)}`)
+  if (config.displayId > 0) args.push(`--display-id=${Math.trunc(config.displayId)}`)
   if (config.orientation !== '0') args.push(`--orientation=${config.orientation}`)
 
   if (config.recordEnabled) {
@@ -122,6 +134,15 @@ export function buildScrcpyArgs(config: LaunchConfig, serial: string): string[] 
   if (config.showTouches) args.push('--show-touches')
   if (config.fullscreen) args.push('--fullscreen')
   if (config.borderless) args.push('--window-borderless')
+  if (!config.windowAspectRatioLock) args.push('--no-window-aspect-ratio-lock')
+  if (config.pushTarget.trim()) {
+    if (config.pushTarget.includes('\0')) throw new Error('Push target may not contain null bytes.')
+    args.push(`--push-target=${config.pushTarget.trim()}`)
+  }
+  if (config.tunnelPort.trim()) {
+    if (!validatePortRange(config.tunnelPort)) throw new Error('Tunnel port must be a port or ascending port range from 1 to 65535.')
+    args.push(`--port=${config.tunnelPort.trim()}`)
+  }
 
   if (config.crop.width > 0) {
     args.push(`--crop=${Math.trunc(config.crop.width)}:${Math.trunc(config.crop.height)}:${Math.trunc(config.crop.x)}:${Math.trunc(config.crop.y)}`)

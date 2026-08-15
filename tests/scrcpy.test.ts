@@ -5,19 +5,25 @@ import {
   isSupportedScrcpyVersion,
   parseAdbDevices,
   splitExtraArgs,
-  validateDeviceAddress
+  validateDeviceAddress,
+  validatePortRange
 } from '../src/main/scrcpy'
 
 function config(overrides: Partial<LaunchConfig> = {}): LaunchConfig {
   return {
     windowTitle: '',
     videoBitRate: 8,
+    videoBuffer: 0,
+    audioBuffer: 0,
     maxSize: 0,
     maxFps: 0,
+    displayId: 0,
     orientation: '0',
     videoCodec: 'default',
     shortcutModifier: 'default',
     keyboardMode: 'default',
+    mouseMode: 'default',
+    gamepadMode: 'default',
     alwaysOnTop: false,
     control: true,
     audio: true,
@@ -26,8 +32,13 @@ function config(overrides: Partial<LaunchConfig> = {}): LaunchConfig {
     showTouches: false,
     fullscreen: false,
     borderless: false,
+    windowAspectRatioLock: true,
+    pushTarget: '',
+    tunnelPort: '',
     recordEnabled: false,
     recordPath: '',
+    autoRecordName: false,
+    recordDirectory: '',
     noPlayback: false,
     crop: { x: 0, y: 0, width: 0, height: 0 },
     window: { x: 0, y: 0, width: 0, height: 0 },
@@ -132,6 +143,22 @@ describe('buildScrcpyArgs', () => {
       'Crop width and height'
     )
   })
+
+  it('builds explicit input, file target and tunnel options', () => {
+    const args = buildScrcpyArgs(
+      config({ mouseMode: 'uhid', gamepadMode: 'aoa', pushTarget: '/sdcard/Movies/', tunnelPort: '28000:28010' }),
+      'ABC123'
+    )
+    expect(args).toContain('--mouse=uhid')
+    expect(args).toContain('--gamepad=aoa')
+    expect(args).toContain('--push-target=/sdcard/Movies/')
+    expect(args).toContain('--port=28000:28010')
+  })
+})
+
+describe('validatePortRange', () => {
+  it.each(['1', '5555', '27183:27199', '65535'])('accepts %s', (value) => expect(validatePortRange(value)).toBe(true))
+  it.each(['0', '65536', '28000:27000', 'abc', '1:2:3'])('rejects %s', (value) => expect(validatePortRange(value)).toBe(false))
 })
 
 describe('splitExtraArgs', () => {

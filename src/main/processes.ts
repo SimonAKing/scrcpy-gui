@@ -1,12 +1,14 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { constants as fsConstants, existsSync, statSync } from 'node:fs'
-import { access } from 'node:fs/promises'
+import { access, writeFile } from 'node:fs/promises'
 import { delimiter, dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import type {
+  AutomationStep,
   Device,
+  DeviceControlAction,
+  DeviceLaunch,
   EnvironmentStatus,
-  LaunchConfig,
   OperationResult,
   RuntimeConfig,
   ScrcpyStatusEvent
@@ -21,6 +23,25 @@ interface CommandOutput {
 }
 
 const activeProcesses = new Map<string, ChildProcessWithoutNullStreams>()
+const CONTROL_KEYCODES: Partial<Record<DeviceControlAction, string>> = {
+  back: 'KEYCODE_BACK',
+  home: 'KEYCODE_HOME',
+  'app-switch': 'KEYCODE_APP_SWITCH',
+  menu: 'KEYCODE_MENU',
+  'volume-up': 'KEYCODE_VOLUME_UP',
+  'volume-down': 'KEYCODE_VOLUME_DOWN',
+  power: 'KEYCODE_POWER',
+  'screen-on': 'KEYCODE_WAKEUP',
+  'screen-off': 'KEYCODE_SLEEP'
+}
+const SPECIAL_CONTROL_ACTIONS = new Set<DeviceControlAction>([
+  'rotate',
+  'auto-rotate',
+  'screen-on',
+  'screen-off',
+  'show-touches-on',
+  'show-touches-off'
+])
 
 function executableName(binary: 'scrcpy' | 'adb'): string {
   return process.platform === 'win32' ? `${binary}.exe` : binary
@@ -50,6 +71,8 @@ export async function resolveBinary(runtime: RuntimeConfig, binary: 'scrcpy' | '
       candidates.push(join(dirname(configured), name))
     }
   }
+
+  if (process.resourcesPath) candidates.push(join(process.resourcesPath, 'scrcpy', name))
 
   const pathFolders = (process.env.PATH || process.env.Path || '').split(delimiter).filter(Boolean)
   if (process.platform === 'darwin') pathFolders.push('/opt/homebrew/bin', '/usr/local/bin', '/opt/local/bin')
@@ -142,12 +165,69 @@ async function adbCommand(runtime: RuntimeConfig, args: string[]): Promise<Comma
   return execute(adbPath, args)
 }
 
+function executeBinary(file: string, args: string[], timeout = 20_000): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, { windowsHide: true, env: { ...process.env, LANG: 'en_US.UTF-8' } })
+    const stdout: Buffer[] = []
+    const stderr: Buffer[] = []
+    let size = 0
+    let settled = false
+    const timer = setTimeout(() => {
+      child.kill()
+      if (!settled) {
+        settled = true
+        reject(new Error('adb screenshot timed out.'))
+      }
+    }, timeout)
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      size += chunk.length
+      if (size > 64 * 1024 * 1024) {
+        child.kill()
+        if (!settled) {
+          settled = true
+          clearTimeout(timer)
+          reject(new Error('Device screenshot exceeded the 64 MB safety limit.'))
+        }
+        return
+      }
+      stdout.push(chunk)
+    })
+    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
+    child.on('error', (error) => {
+      clearTimeout(timer)
+      if (!settled) {
+        settled = true
+        reject(error)
+      }
+    })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      if (settled) return
+      settled = true
+      if (code !== 0) {
+        reject(new Error(Buffer.concat(stderr).toString().trim() || `adb exited with code ${code ?? 'unknown'}.`))
+        return
+      }
+      resolve(Buffer.concat(stdout))
+    })
+  })
+}
+
 export async function listDevices(runtime: RuntimeConfig): Promise<OperationResult<Device[]>> {
   try {
     const result = await adbCommand(runtime, ['devices', '-l'])
     return { ok: true, data: parseAdbDevices(result.stdout) }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+export async function stopAdbServer(runtime: RuntimeConfig): Promise<void> {
+  try {
+    await adbCommand(runtime, ['kill-server'])
+  } catch {
+    // Quitting must not be blocked if adb is already unavailable.
   }
 }
 
@@ -194,14 +274,113 @@ export async function disconnectDevice(runtime: RuntimeConfig, target: string): 
   }
 }
 
+async function rotateDevice(runtime: RuntimeConfig, serial: string): Promise<string> {
+  const state = await adbCommand(runtime, ['-s', serial, 'shell', 'dumpsys', 'input'])
+  const output = `${state.stdout}\n${state.stderr}`
+  const match = output.match(/SurfaceOrientation:\s*([0-3])/i) || output.match(/orientation=([0-3])/i)
+  const next = ((match ? Number(match[1]) : 0) + 1) % 4
+  try {
+    await adbCommand(runtime, ['-s', serial, 'shell', 'wm', 'user-rotation', 'lock', String(next)])
+  } catch {
+    await adbCommand(runtime, ['-s', serial, 'shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0'])
+    await adbCommand(runtime, ['-s', serial, 'shell', 'settings', 'put', 'system', 'user_rotation', String(next)])
+  }
+  return `Device rotated to orientation ${next}.`
+}
+
+export async function controlDevice(
+  runtime: RuntimeConfig,
+  serial: string,
+  action: DeviceControlAction
+): Promise<OperationResult<string>> {
+  const target = serial.trim()
+  if (!target) return { ok: false, error: 'Choose a device first.' }
+  try {
+    if (action === 'rotate') return { ok: true, data: await rotateDevice(runtime, target) }
+    if (action === 'auto-rotate') {
+      try {
+        await adbCommand(runtime, ['-s', target, 'shell', 'wm', 'user-rotation', 'free'])
+      } catch {
+        await adbCommand(runtime, ['-s', target, 'shell', 'settings', 'put', 'system', 'accelerometer_rotation', '1'])
+      }
+      return { ok: true, data: `Automatic rotation restored on ${target}.` }
+    }
+    if (action === 'show-touches-on' || action === 'show-touches-off') {
+      await adbCommand(runtime, ['-s', target, 'shell', 'settings', 'put', 'system', 'show_touches', action === 'show-touches-on' ? '1' : '0'])
+      return { ok: true, data: `${action} sent to ${target}.` }
+    }
+    const keyCode = CONTROL_KEYCODES[action]
+    if (!keyCode) return { ok: false, error: 'Unsupported device control action.' }
+    if (action === 'screen-on' || action === 'screen-off') {
+      try {
+        await adbCommand(runtime, ['-s', target, 'shell', 'cmd', 'display', action === 'screen-on' ? 'power-on' : 'power-off', '0'])
+        return { ok: true, data: `${action} sent to ${target}.` }
+      } catch {
+        // Older Android versions do not expose cmd display power controls.
+      }
+    }
+    await adbCommand(runtime, ['-s', target, 'shell', 'input', 'keyevent', keyCode])
+    return { ok: true, data: `${action} sent to ${target}.` }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+export async function captureDeviceScreenshot(
+  runtime: RuntimeConfig,
+  serial: string,
+  outputPath: string
+): Promise<OperationResult<string>> {
+  try {
+    const adbPath = await resolveBinary(runtime, 'adb')
+    if (!adbPath) return { ok: false, error: 'adb executable not found.' }
+    const png = await executeBinary(adbPath, ['-s', serial.trim(), 'exec-out', 'screencap', '-p'])
+    const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    if (png.length < signature.length || !png.subarray(0, signature.length).equals(signature)) {
+      throw new Error('The device did not return a valid PNG screenshot.')
+    }
+    await writeFile(outputPath, png)
+    return { ok: true, data: outputPath }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+export async function runDeviceAutomation(
+  runtime: RuntimeConfig,
+  serial: string,
+  steps: AutomationStep[]
+): Promise<OperationResult<string>> {
+  if (!serial.trim()) return { ok: false, error: 'Choose a device first.' }
+  if (!Array.isArray(steps) || steps.length === 0) return { ok: false, error: 'The automation has no actions.' }
+  if (steps.length > 200) return { ok: false, error: 'An automation may contain at most 200 actions.' }
+  let totalDelay = 0
+  for (const step of steps) {
+    if (!CONTROL_KEYCODES[step.action] && !SPECIAL_CONTROL_ACTIONS.has(step.action)) {
+      return { ok: false, error: 'The automation contains an unsupported action.' }
+    }
+    if (!Number.isFinite(step.delayMs) || step.delayMs < 0 || step.delayMs > 60_000) {
+      return { ok: false, error: 'Each automation delay must be between 0 and 60 seconds.' }
+    }
+    totalDelay += step.delayMs
+  }
+  if (totalDelay > 30 * 60_000) return { ok: false, error: 'Automation duration may not exceed 30 minutes.' }
+
+  for (const step of steps) {
+    if (step.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, step.delayMs))
+    const result = await controlDevice(runtime, serial, step.action)
+    if (!result.ok) return result
+  }
+  return { ok: true, data: `Replayed ${steps.length} actions on ${serial}.` }
+}
+
 function emitMessage(emit: StatusEmitter, serial: string, status: ScrcpyStatusEvent['status'], message: string): void {
   emit({ serial, status, message, timestamp: new Date().toISOString() })
 }
 
 export async function startScrcpy(
   runtime: RuntimeConfig,
-  launch: LaunchConfig,
-  serials: string[],
+  launches: DeviceLaunch[],
   emit: StatusEmitter
 ): Promise<OperationResult<string[]>> {
   const scrcpyPath = await resolveBinary(runtime, 'scrcpy')
@@ -213,11 +392,15 @@ export async function startScrcpy(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
-  const uniqueSerials = [...new Set(serials.map((serial) => serial.trim()).filter(Boolean))]
-  if (uniqueSerials.length === 0) return { ok: false, error: 'Select at least one device.' }
+  const uniqueLaunches = [...new Map(
+    launches
+      .filter((request) => request && request.serial.trim())
+      .map((request) => [request.serial.trim(), { serial: request.serial.trim(), launch: request.launch }])
+  ).values()]
+  if (uniqueLaunches.length === 0) return { ok: false, error: 'Select at least one device.' }
 
   const started: string[] = []
-  for (const serial of uniqueSerials) {
+  for (const { serial, launch } of uniqueLaunches) {
     if (activeProcesses.has(serial)) {
       emitMessage(emit, serial, 'error', 'scrcpy is already running for this device.')
       continue
@@ -225,7 +408,17 @@ export async function startScrcpy(
 
     let args: string[]
     try {
-      args = buildScrcpyArgs(launch, serial)
+      let effectiveLaunch = launch
+      if (launch.recordEnabled && launch.autoRecordName) {
+        if (!launch.recordDirectory.trim()) throw new Error('Choose a recording folder for automatic filenames.')
+        const safeSerial = serial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
+        const timestamp = new Date().toISOString().replaceAll(':', '-').slice(0, 19)
+        effectiveLaunch = {
+          ...launch,
+          recordPath: join(launch.recordDirectory.trim(), `scrcpy-${safeSerial}-${timestamp}.mp4`)
+        }
+      }
+      args = buildScrcpyArgs(effectiveLaunch, serial)
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
