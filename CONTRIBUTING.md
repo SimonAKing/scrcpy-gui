@@ -1,41 +1,34 @@
-## Contributing
+# Contributing
 
-[fork]: /fork
-[pr]: /compare
-[style]: https://standardjs.com/
-[code-of-conduct]: CODE_OF_CONDUCT.md
+Thanks for helping maintain Scrcpy GUI. Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-Hi there! We're thrilled that you'd like to contribute to this project. Your help is essential for keeping it great.
+## Before opening an issue
 
-Please note that this project is released with a [Contributor Code of Conduct][code-of-conduct]. By participating in this project you agree to abide by its terms.
+1. Confirm the same device works with the current scrcpy CLI.
+2. Use scrcpy 4.x and the latest Scrcpy GUI beta.
+3. Copy the relevant stdout/stderr from the app's **Logs** tab.
+4. Search existing issues for the same device and error.
 
-## Issues and PRs
+## Development
 
-If you have suggestions for how this project could be improved, or want to report a bug, open an issue! We'd love all and any contributions. If you have questions, too, we'd love to hear them.
+Use Node.js 22 or later:
 
-We'd also love PRs. If you're thinking of a large PR, we advise opening up an issue first to talk about it, though! Look at the links below if you're not sure how to open a PR.
+```bash
+npm ci
+npm test
+npm run typecheck
+npm run build
+```
 
-## Submitting a pull request
+Run the app locally with `npm run dev`. A full unpacked package can be produced with `npm run build:dir`.
 
-1. [Fork][fork] and clone the repository.
-1. Configure and install the dependencies: `npm install`.
-1. Make sure the tests pass on your machine: `npm test`, note: these tests also apply the linter, so there's no need to lint separately.
-1. Create a new branch: `git checkout -b my-branch-name`.
-1. Make your change, add tests, and make sure the tests still pass.
-1. Push to your fork and [submit a pull request][pr].
-1. Pat your self on the back and wait for your pull request to be reviewed and merged.
+## Pull requests
 
-Here are a few things you can do that will increase the likelihood of your pull request being accepted:
+- Keep changes focused and explain which issue or user workflow they address.
+- Add or update tests for command construction, validation, and device parsing changes.
+- Never build a shell command from user input. Arguments must be passed as an array to `spawn` or `execFile`.
+- Renderer features must use the typed preload API; do not enable Node integration or disable context isolation.
+- Verify new scrcpy flags against the current upstream documentation.
+- Update `README.md` and `CHANGELOG.md` when behavior visible to users changes.
 
-- Follow the [style guide][style] which is using standard. Any linting errors should be shown when running `npm test`.
-- Write and update tests.
-- Keep your changes as focused as possible. If there are multiple changes you would like to make that are not dependent upon each other, consider submitting them as separate pull requests.
-- Write a [good commit message](http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html).
-
-Work in Progress pull requests are also welcome to get feedback early on, or if there is something blocked you.
-
-## Resources
-
-- [How to Contribute to Open Source](https://opensource.guide/how-to-contribute/)
-- [Using Pull Requests](https://help.github.com/articles/about-pull-requests/)
-- [GitHub Help](https://help.github.com)
+Large changes are welcome, but please open an issue first so maintainers can agree on scope and compatibility.

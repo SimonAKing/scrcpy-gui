@@ -1,41 +1,36 @@
-## 🎉 Scrcpy-GUI 1.0.0
+# Changelog
 
-*To receive a notification on new releases, click on **Watch > Releases only** on the top.*
+## 2.0.0-beta.1
 
----
+This release restarts active development with a ground-up Electron 43, Vue 3, TypeScript, and Vite architecture.
 
-Because I don't have a macOS, I can't package dmg format.
+### Added
 
-You can only compile it manually.
+- Android 11+ wireless pairing and wireless connect/disconnect flows
+- Multi-device launch with per-device lifecycle tracking and duplicate protection
+- Persistent stdout/stderr log with optional popup muting
+- Optional minimize-to-tray behavior (#89)
+- Current scrcpy video codecs, audio forwarding, keyboard modes, recording-only mode, geometry, and safe extra arguments
+- English, Simplified Chinese, Traditional Chinese, and Russian locale selection with system-language detection; Russian translation migrated from #69 by @dEN5-tech
+- Cross-platform validation and tag-driven release workflows
 
-Packaged files are generated to the `scrcpy/build` folder.
-```shell
-git clone https://github.com/Tomotoes/scrcpy-gui
-cd scrcpy-gui
-npm i
-npm run build
-```
+### Fixed
 
-If you have packaged dmg format software, please send it to me via email(simon@tomotoes.com), thank you!
+- Stop forcing Ctrl as scrcpy's shortcut modifier, fixing normal Ctrl+X/C/V behavior (#158, #112)
+- Accept valid ports from 1 through 65535 instead of exactly four digits (#118, #115)
+- Replace removed scrcpy 1.x flags with their scrcpy 4.x equivalents
+- Pass orientation as degrees instead of legacy indices
+- Validate paired width/height fields before launch (#60)
+- Report actual launch failure stderr instead of false success (#148, #145, #128, #124, #121, #120, #100, #95, #70)
+- Resolve `scrcpy` and sibling `adb` consistently on macOS, Windows, and Linux (#109, #101)
 
-Feel free to open issues or PRs for any problem you may encounter, typos that you see or aspects that are confusing. Contributions are welcome, open an issue or email me if you have something you want to work on.
+### Security
 
+- Enable Electron renderer sandboxing and context isolation
+- Replace renderer Node access with a typed, restricted preload API
+- Pass extra arguments directly without invoking a shell
 
-因为我没有 macOS, 所以我无法打包出 `dmg` 格式的应用.
+## 1.5.1
 
-你可以通过以下命令手动打包这个项目, 打包文件将生成到 `scrcpy/build` 文件夹.
-```shell
-git clone https://github.com/Tomotoes/scrcpy-gui
-cd scrcpy-gui
-npm i
-npm run build
-```
-
-如果你已经打包出了 `dmg`格式的软件,欢迎通过 email(simon@tomotoes.com) 发送给我, 谢谢了!
-
-
-如果你因不可抗力原因无法下载软件, 我提供了百度云盘分享链接,里面也包括`scrcpy`软件:
-
-链接: https://pan.baidu.com/s/1IESNnqxS67tT50JxQSZC-A 提取码: 8d1h
-
-如果你有任何问题, 欢迎提交 `Issues` 或 `PR`.
+- Added Traditional Chinese language support
+- Fixed turn-screen-off behavior
