@@ -1,8 +1,8 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell, Tray } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell, Tray } from 'electron'
 import { basename, extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
-import { stat } from 'node:fs/promises'
+import { mkdir, stat } from 'node:fs/promises'
 import type {
   AutomationStep,
   BatchProgressEvent,
@@ -56,6 +56,7 @@ import { ConfigRepository } from './configRepository'
 import { EventStore, validateEventQuery } from './eventStore'
 import { failureFromUnknown, operationFailure } from '../shared/errors'
 import { deviceWorkspaceService, validatePackageId, validateRemoteDirectory, type SelectedLocalFile } from './deviceWorkspaceService'
+import { ArtifactService } from './artifactService'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -66,6 +67,7 @@ let killAdbOnQuit = false
 let quitRuntime: RuntimeConfig = { scrcpyPath: '' }
 let shutdownStarted = false
 let configRepository: ConfigRepository | undefined
+let artifactService: ArtifactService | undefined
 const eventStore = new EventStore()
 const rendererEntryUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
 
@@ -86,7 +88,7 @@ function assertTrustedIpcSender(event: Electron.IpcMainInvokeEvent): void {
 
 function domainForChannel(channel: string): 'runtime' | 'device' | 'session' | 'config' | 'automation' | 'artifact' {
   if (channel.includes('automation')) return 'automation'
-  if (channel.includes('screenshot') || channel.startsWith('dialog:record')) return 'artifact'
+  if (channel.includes('screenshot') || channel.startsWith('dialog:record') || channel.startsWith('artifact:')) return 'artifact'
   if (channel.startsWith('device:')) return 'device'
   if (channel.startsWith('session:') || channel.startsWith('scrcpy:')) return 'session'
   if (channel.startsWith('config:')) return 'config'
@@ -162,6 +164,19 @@ function sendSessionEvent(event: ScrcpySessionEvent): void {
     deviceId: event.session.serialAtLaunch, sessionId: event.session.id, stage: event.session.state,
     message: event.message, data: { scene: event.session.scene, pid: event.session.pid, exitCode: event.session.exitCode }
   })
+  if (event.type === 'state' && (event.session.state === 'stopped' || event.session.state === 'failed')) {
+    void artifactService?.registerRecording(event.session).then((artifact) => {
+      if (artifact) eventStore.publish({
+        level: artifact.status === 'incomplete' ? 'warn' : artifact.status === 'missing' ? 'error' : 'info',
+        domain: 'artifact', action: 'recording-indexed', deviceId: artifact.deviceId, sessionId: artifact.sessionId,
+        stage: artifact.status, message: `Recording artifact indexed as ${artifact.status}.`,
+        data: { artifactId: artifact.id, size: artifact.size }
+      })
+    }).catch((error) => eventStore.publish({
+      level: 'error', domain: 'artifact', action: 'recording-index-failed', deviceId: event.session.serialAtLaunch,
+      sessionId: event.session.id, stage: 'artifact-index', message: error instanceof Error ? error.message : String(error)
+    }))
+  }
 }
 
 subscribeScrcpySessionEvents(sendSessionEvent)
@@ -302,6 +317,77 @@ function availableDeviceSerials(value: unknown): string[] {
 handle('app:version', () => app.getVersion())
 handle('events:list', (_event, query: unknown) => eventStore.list(validateEventQuery(query)))
 handle('events:clear', () => eventStore.clear())
+handle('artifact:list', async (_event, query: unknown) => {
+  if (!artifactService) return operationFailure('ARTIFACT_SERVICE_UNAVAILABLE', 'artifact-list', 'Artifact service is not ready.')
+  try {
+    return { ok: true, data: await artifactService.list(query) }
+  } catch (error) {
+    return failureFromUnknown(error, 'ARTIFACT_LIST_FAILED', 'artifact-list', 'Unable to load the artifact library.', { retryable: true })
+  }
+})
+handle('artifact:open', async (_event, id: string) => {
+  if (!artifactService) return operationFailure('ARTIFACT_SERVICE_UNAVAILABLE', 'artifact-open', 'Artifact service is not ready.')
+  try {
+    const artifact = await artifactService.getExisting(boundedString(id, 'artifact id', 128))
+    const error = await shell.openPath(artifact.path)
+    return error ? operationFailure('ARTIFACT_OPEN_FAILED', 'artifact-open', 'Unable to open the artifact.', { detail: error }) : { ok: true }
+  } catch (error) {
+    return failureFromUnknown(error, 'ARTIFACT_OPEN_FAILED', 'artifact-open', 'Unable to open the artifact.')
+  }
+})
+handle('artifact:reveal', async (_event, id: string) => {
+  if (!artifactService) return operationFailure('ARTIFACT_SERVICE_UNAVAILABLE', 'artifact-reveal', 'Artifact service is not ready.')
+  try {
+    const artifact = await artifactService.getExisting(boundedString(id, 'artifact id', 128))
+    shell.showItemInFolder(artifact.path)
+    return { ok: true }
+  } catch (error) {
+    return failureFromUnknown(error, 'ARTIFACT_REVEAL_FAILED', 'artifact-reveal', 'Unable to reveal the artifact.')
+  }
+})
+handle('artifact:copy-path', async (_event, id: string) => {
+  if (!artifactService) return operationFailure('ARTIFACT_SERVICE_UNAVAILABLE', 'artifact-copy-path', 'Artifact service is not ready.')
+  try {
+    const artifact = await artifactService.getExisting(boundedString(id, 'artifact id', 128))
+    clipboard.writeText(artifact.path)
+    return { ok: true }
+  } catch (error) {
+    return failureFromUnknown(error, 'ARTIFACT_COPY_FAILED', 'artifact-copy-path', 'Unable to copy the artifact path.')
+  }
+})
+handle('artifact:delete', async (_event, id: string, deleteFile: boolean) => {
+  if (!artifactService) return operationFailure('ARTIFACT_SERVICE_UNAVAILABLE', 'artifact-delete', 'Artifact service is not ready.')
+  try {
+    const validatedId = boundedString(id, 'artifact id', 128)
+    const shouldDeleteFile = strictBoolean(deleteFile, 'delete artifact file')
+    if (shouldDeleteFile) {
+      const artifact = await artifactService.getExisting(validatedId)
+      const confirmation = await dialog.showMessageBox(mainWindow!, {
+        type: 'warning',
+        title: 'Delete artifact file permanently?',
+        message: `Delete ${artifact.name}?`,
+        detail: `${artifact.path}\n\nThis action cannot be undone.`,
+        buttons: ['Cancel', 'Delete permanently'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true
+      })
+      if (confirmation.response !== 1) {
+        return operationFailure('ARTIFACT_DELETE_CANCELED', 'artifact-delete', 'Artifact deletion canceled.')
+      }
+    }
+    await artifactService.delete(
+      validatedId,
+      shouldDeleteFile
+    )
+    return { ok: true }
+  } catch (error) {
+    return failureFromUnknown(error, 'ARTIFACT_DELETE_FAILED', 'artifact-delete', 'Unable to delete the artifact.', {
+      retryable: true,
+      suggestedActions: ['Close applications using the file and retry, or remove only the library entry.']
+    })
+  }
+})
 handle('app:minimize-to-tray', (_event, enabled: boolean) => {
   minimizeToTray = strictBoolean(enabled, 'minimizeToTray')
 })
@@ -400,15 +486,33 @@ handle('device:screenshot', async (_event, runtime: RuntimeConfig, serial: strin
   const validatedSerial = deviceSerial(serial)
   const safeSerial = validatedSerial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
   const timestamp = new Date().toISOString().replaceAll(':', '-').slice(0, 19)
+  const screenshotDirectory = join(app.getPath('pictures'), 'Scrcpy GUI')
+  await mkdir(screenshotDirectory, { recursive: true })
   const result = await dialog.showSaveDialog({
     title: 'Save device screenshot',
-    defaultPath: join(app.getPath('pictures'), `scrcpy-${safeSerial}-${timestamp}.png`),
+    defaultPath: join(screenshotDirectory, `scrcpy-${safeSerial}-${timestamp}.png`),
     filters: [{ name: 'PNG image', extensions: ['png'] }]
   })
   if (result.canceled || !result.filePath) {
     return operationFailure('SCREENSHOT_CANCELED', 'screenshot-destination', 'Screenshot canceled.')
   }
-  return captureDeviceScreenshot(validatedRuntime, validatedSerial, result.filePath)
+  const capture = await captureDeviceScreenshot(validatedRuntime, validatedSerial, result.filePath)
+  if (capture.ok && artifactService) {
+    try {
+      const artifact = await artifactService.register({ kind: 'screenshot', path: result.filePath, deviceId: validatedSerial })
+      eventStore.publish({
+        level: 'info', domain: 'artifact', action: 'screenshot-indexed', deviceId: validatedSerial,
+        stage: artifact.status, message: 'Screenshot added to the artifact library.',
+        data: { artifactId: artifact.id, size: artifact.size }
+      })
+    } catch (error) {
+      eventStore.publish({
+        level: 'error', domain: 'artifact', action: 'screenshot-index-failed', deviceId: validatedSerial,
+        stage: 'artifact-index', message: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
+  return capture
 })
 handle(
   'device:automation',
@@ -449,6 +553,10 @@ handle('device:push-files', async (
       conflict,
       sendBatchProgress
     )
+    await artifactService?.registerTransferReport('file-push', batch).catch((error) => eventStore.publish({
+      level: 'error', domain: 'artifact', action: 'transfer-report-index-failed', stage: 'artifact-index',
+      message: error instanceof Error ? error.message : String(error), data: { batchId: batch.id, operation: 'file-push' }
+    }))
     return { ok: true, data: batch }
   } catch (error) {
     return failureFromUnknown(error, 'FILE_PUSH_PREPARE_FAILED', 'file-push', 'Unable to prepare the file transfer.')
@@ -476,6 +584,10 @@ handle('device:install-apk', async (
     const batch = await deviceWorkspaceService.installApk(
       validatedRuntime, validatedSerials, file, allowReplace, allowDowngrade, sendBatchProgress
     )
+    await artifactService?.registerTransferReport('apk-install', batch).catch((error) => eventStore.publish({
+      level: 'error', domain: 'artifact', action: 'transfer-report-index-failed', stage: 'artifact-index',
+      message: error instanceof Error ? error.message : String(error), data: { batchId: batch.id, operation: 'apk-install' }
+    }))
     return { ok: true, data: batch }
   } catch (error) {
     return failureFromUnknown(error, 'APK_INSTALL_PREPARE_FAILED', 'apk-install', 'Unable to prepare the APK installation.')
@@ -524,6 +636,7 @@ handle('shell:open', async (_event, rawUrl: string) => {
 
 app.whenReady().then(() => {
   configRepository = new ConfigRepository(app.getPath('userData'))
+  artifactService = new ArtifactService(app.getPath('userData'))
   configureSessionSecurity()
   createWindow()
   createTray()

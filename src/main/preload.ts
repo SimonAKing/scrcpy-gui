@@ -3,6 +3,7 @@ import type {
   AutomationStep,
   AppEvent,
   AppEventQuery,
+  ArtifactQuery,
   BatchProgressEvent,
   FileConflictPolicy,
   CommandPreviewRequest,
@@ -54,6 +55,11 @@ const api: ScrcpyApi = {
     ipcRenderer.invoke('device:apps', runtime, serial, refresh),
   startApp: (runtime: RuntimeConfig, serial: string, packageId: string) =>
     ipcRenderer.invoke('device:start-app', runtime, serial, packageId),
+  listArtifacts: (query: ArtifactQuery) => ipcRenderer.invoke('artifact:list', query),
+  openArtifact: (id: string) => ipcRenderer.invoke('artifact:open', id),
+  revealArtifact: (id: string) => ipcRenderer.invoke('artifact:reveal', id),
+  copyArtifactPath: (id: string) => ipcRenderer.invoke('artifact:copy-path', id),
+  deleteArtifact: (id: string, deleteFile: boolean) => ipcRenderer.invoke('artifact:delete', id, deleteFile),
   setMinimizeToTray: (enabled: boolean) => ipcRenderer.invoke('app:minimize-to-tray', enabled),
   setQuitBehavior: (runtime: RuntimeConfig, killAdbOnQuit: boolean) =>
     ipcRenderer.invoke('app:quit-behavior', runtime, killAdbOnQuit),

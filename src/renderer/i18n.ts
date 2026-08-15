@@ -7,6 +7,13 @@ const en: Record<string, string> = {
   settingsSection_general: 'General', settingsSection_video: 'Video', settingsSection_controls: 'Controls',
   settingsSection_recording: 'Recording', settingsSection_geometry: 'Window', settingsSection_advanced: 'Advanced',
   logs: 'Logs',
+  artifacts: 'Artifacts', artifactLibrary: 'Artifact library', artifactsHint: 'Screenshots, recordings, transfer reports, and diagnostics indexed by the main process.',
+  filterArtifactKind: 'Filter artifacts by kind', filterArtifactDevice: 'Filter artifacts by device', allArtifactKinds: 'All kinds', allDevices: 'All devices',
+  'artifactKind_screenshot': 'Screenshot', 'artifactKind_recording': 'Recording', 'artifactKind_transfer-report': 'Transfer report', 'artifactKind_diagnostic': 'Diagnostic',
+  artifactStatus_available: 'Available', artifactStatus_missing: 'Missing', artifactStatus_incomplete: 'Incomplete', loadingArtifacts: 'Loading artifacts…', noArtifacts: 'No artifacts match these filters.',
+  open: 'Open', reveal: 'Show in folder', copyPath: 'Copy path', removeIndex: 'Remove from library', deleteFile: 'Delete file',
+  artifactListFailed: 'Could not load the artifact library.', artifactOpenFailed: 'Could not open the artifact.', artifactRevealFailed: 'Could not show the artifact in its folder.', artifactCopyFailed: 'Could not copy the artifact path.', artifactDeleteFailed: 'Could not delete the artifact.',
+  artifactPathCopied: 'Artifact path copied.', artifactFileDeleted: 'Artifact file deleted.', artifactIndexDeleted: 'Artifact removed from the library; the file was kept.', notApplicable: 'Not device-specific',
   sessions: 'Sessions', sessionCenter: 'Session center',
   sessionsHint: 'Every launch has its own identity and verified lifecycle; a spawned process is not reported as running until it survives the startup window.',
   noSessions: 'No scrcpy sessions have been launched in this app run.', stopAllSessions: 'Stop all active',
@@ -148,7 +155,10 @@ const en: Record<string, string> = {
 }
 
 const zhCN: Record<string, string> = {
-  devices: '设备', device: '设备', sessions: '会话', settings: '设置', logs: '日志', settingsSection_general: '常规', settingsSection_video: '视频',
+  devices: '设备', device: '设备', sessions: '会话', artifacts: '产物', settings: '设置', logs: '日志', settingsSection_general: '常规', settingsSection_video: '视频',
+  artifactLibrary: '产物库', artifactsHint: '由主进程统一索引截图、录像、传输报告和诊断包。', filterArtifactKind: '按产物类型筛选', filterArtifactDevice: '按设备筛选', allArtifactKinds: '全部类型', allDevices: '全部设备',
+  'artifactKind_screenshot': '截图', 'artifactKind_recording': '录像', 'artifactKind_transfer-report': '传输报告', 'artifactKind_diagnostic': '诊断包', artifactStatus_available: '可用', artifactStatus_missing: '文件缺失', artifactStatus_incomplete: '不完整', loadingArtifacts: '正在加载产物…', noArtifacts: '没有符合筛选条件的产物。',
+  open: '打开', reveal: '在文件夹中显示', copyPath: '复制路径', removeIndex: '仅移出产物库', deleteFile: '删除文件', artifactListFailed: '无法加载产物库。', artifactOpenFailed: '无法打开产物。', artifactRevealFailed: '无法在文件夹中显示产物。', artifactCopyFailed: '无法复制产物路径。', artifactDeleteFailed: '无法删除产物。', artifactPathCopied: '已复制产物路径。', artifactFileDeleted: '产物文件已删除。', artifactIndexDeleted: '已移出产物库，原文件仍保留。', notApplicable: '不针对具体设备',
   sessionCenter: '会话中心', sessionsHint: '每次启动都有独立身份和经过验证的生命周期；进程只有通过启动观察窗口后才会显示为运行中。',
   noSessions: '本次运行尚未启动 scrcpy 会话。', stopAllSessions: '停止全部活动会话', sessionsStopFailed: '个会话无法停止。',
   sessionState_queued: '排队中', sessionState_preflighting: '预检中', sessionState_launching: '启动中',
