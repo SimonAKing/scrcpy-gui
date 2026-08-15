@@ -10,6 +10,19 @@ export interface Device {
   connection: 'usb' | 'wireless'
 }
 
+export interface DeviceTrackerEvent {
+  status: 'starting' | 'tracking' | 'restarting' | 'error' | 'stopped'
+  source: 'track' | 'poll'
+  devices: Device[]
+  added: Device[]
+  changed: Device[]
+  removed: Device[]
+  revision: number
+  timestamp: string
+  message: string
+  retryInMs?: number
+}
+
 export interface RuntimeConfig {
   scrcpyPath: string
 }
@@ -287,6 +300,8 @@ export interface ScrcpyApi {
   saveConfig(revision: number, config: PersistedConfig): Promise<OperationResult<ConfigSaveResult>>
   getEnvironment(runtime: RuntimeConfig): Promise<EnvironmentStatus>
   listDevices(runtime: RuntimeConfig): Promise<OperationResult<Device[]>>
+  trackDevices(runtime: RuntimeConfig): Promise<OperationResult<Device[]>>
+  setDeviceTrackerVisibility(visible: boolean): Promise<void>
   connect(runtime: RuntimeConfig, target: string): Promise<OperationResult<string>>
   pair(runtime: RuntimeConfig, target: string, code: string): Promise<OperationResult<string>>
   disconnect(runtime: RuntimeConfig, target: string): Promise<OperationResult<string>>
@@ -304,4 +319,5 @@ export interface ScrcpyApi {
   openExternal(url: string): Promise<void>
   onStatus(callback: (event: ScrcpyStatusEvent) => void): () => void
   onSession(callback: (event: ScrcpySessionEvent) => void): () => void
+  onDevices(callback: (event: DeviceTrackerEvent) => void): () => void
 }

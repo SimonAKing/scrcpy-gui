@@ -3,6 +3,7 @@ import type {
   AutomationStep,
   DeviceControlAction,
   DeviceLaunch,
+  DeviceTrackerEvent,
   Locale,
   PersistedConfig,
   RuntimeConfig,
@@ -20,6 +21,8 @@ const api: ScrcpyApi = {
   saveConfig: (revision: number, config: PersistedConfig) => ipcRenderer.invoke('config:save', revision, config),
   getEnvironment: (runtime: RuntimeConfig) => ipcRenderer.invoke('system:environment', runtime),
   listDevices: (runtime: RuntimeConfig) => ipcRenderer.invoke('device:list', runtime),
+  trackDevices: (runtime: RuntimeConfig) => ipcRenderer.invoke('device:track', runtime),
+  setDeviceTrackerVisibility: (visible: boolean) => ipcRenderer.invoke('device:visibility', visible),
   connect: (runtime: RuntimeConfig, target: string) => ipcRenderer.invoke('device:connect', runtime, target),
   pair: (runtime: RuntimeConfig, target: string, code: string) => ipcRenderer.invoke('device:pair', runtime, target, code),
   disconnect: (runtime: RuntimeConfig, target: string) => ipcRenderer.invoke('device:disconnect', runtime, target),
@@ -50,6 +53,11 @@ const api: ScrcpyApi = {
     const listener = (_event: Electron.IpcRendererEvent, sessionEvent: ScrcpySessionEvent): void => callback(sessionEvent)
     ipcRenderer.on('session:event', listener)
     return () => ipcRenderer.removeListener('session:event', listener)
+  },
+  onDevices: (callback: (event: DeviceTrackerEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, deviceEvent: DeviceTrackerEvent): void => callback(deviceEvent)
+    ipcRenderer.on('device:event', listener)
+    return () => ipcRenderer.removeListener('device:event', listener)
   }
 }
 

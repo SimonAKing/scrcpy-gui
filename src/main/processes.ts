@@ -8,6 +8,7 @@ import type {
   Device,
   DeviceControlAction,
   DeviceLaunch,
+  DeviceTrackerEvent,
   EnvironmentStatus,
   OperationResult,
   RuntimeConfig,
@@ -18,6 +19,7 @@ import type {
 import { buildScrcpyArgs, isSupportedScrcpyVersion, parseAdbDevices, validateDeviceAddress } from './scrcpy'
 import { ScrcpySessionManager } from './sessionManager'
 import { buildCapabilitySnapshot } from './capabilities'
+import { DeviceTracker } from './deviceTracker'
 
 interface CommandOutput {
   stdout: string
@@ -25,6 +27,14 @@ interface CommandOutput {
 }
 
 const sessionManager = new ScrcpySessionManager()
+let trackerRuntime: RuntimeConfig = { scrcpyPath: '' }
+const deviceTracker = new DeviceTracker({
+  pollDevices: async () => {
+    const result = await listDevices(trackerRuntime)
+    if (!result.ok) throw new Error(result.error || 'Unable to poll ADB devices.')
+    return result.data || []
+  }
+})
 const CONTROL_KEYCODES: Partial<Record<DeviceControlAction, string>> = {
   back: 'KEYCODE_BACK',
   home: 'KEYCODE_HOME',
@@ -233,6 +243,29 @@ export async function listDevices(runtime: RuntimeConfig): Promise<OperationResu
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
+}
+
+export async function startDeviceTracker(runtime: RuntimeConfig): Promise<OperationResult<Device[]>> {
+  trackerRuntime = runtime
+  const adbPath = await resolveBinary(runtime, 'adb')
+  if (!adbPath) return { ok: false, error: 'adb executable not found.' }
+  try {
+    return { ok: true, data: deviceTracker.start(adbPath) }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+export function subscribeDeviceTrackerEvents(listener: (event: DeviceTrackerEvent) => void): () => void {
+  return deviceTracker.subscribe(listener)
+}
+
+export function setDeviceTrackerVisibility(visible: boolean): void {
+  deviceTracker.setVisible(visible)
+}
+
+export function stopDeviceTracker(): void {
+  deviceTracker.stop()
 }
 
 export async function stopAdbServer(runtime: RuntimeConfig): Promise<void> {

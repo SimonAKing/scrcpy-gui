@@ -41,6 +41,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .runtime-capabilities { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }.runtime-capabilities-label { margin-right: 3px; color: #747a82; font-size: 10px; font-weight: 760; text-transform: uppercase; }.capability-pill { padding: 4px 7px; border: 1px solid #dfe5e1; border-radius: 999px; color: #397157; background: #f1f8f4; font-size: 9px; font-weight: 700; }.runtime-capability-error { grid-column: 1 / -1; margin: 0; }
 .eyebrow { margin: 0 0 6px; color: #e25944; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .muted { color: #7a8089; line-height: 1.5; }.section-heading, .settings-header, .sessions-header, .logs-header { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin: 31px 0 17px; }.sessions-header .muted { max-width: 720px; margin: 7px 0 0; }
+.tracker-summary { margin: 5px 0 0; color: #858b93; font-size: 10px; }
 h1, h2, p { margin-top: 0; }h1 { margin-bottom: 0; color: #1d2127; font-size: 28px; letter-spacing: -.035em; }h2 { margin-bottom: 18px; font-size: 15px; }
 
 .device-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 12px; }

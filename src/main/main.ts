@@ -23,11 +23,15 @@ import {
   pairDevice,
   runDeviceAutomation,
   startScrcpy,
+  startDeviceTracker,
   stopAdbServer,
   stopAllScrcpy,
   stopScrcpy,
   stopScrcpySession,
-  subscribeScrcpySessionEvents
+  stopDeviceTracker,
+  subscribeDeviceTrackerEvents,
+  subscribeScrcpySessionEvents,
+  setDeviceTrackerVisibility
 } from './processes'
 import {
   automationSteps,
@@ -111,6 +115,10 @@ function sendSessionEvent(event: ScrcpySessionEvent): void {
 }
 
 subscribeScrcpySessionEvents(sendSessionEvent)
+
+subscribeDeviceTrackerEvents((event) => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('device:event', event)
+})
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -246,6 +254,8 @@ handle('config:save', (_event, revision: number, config: PersistedConfig) => {
 })
 handle('system:environment', (_event, runtime: RuntimeConfig) => getEnvironment(runtimeConfig(runtime)))
 handle('device:list', (_event, runtime: RuntimeConfig) => listDevices(runtimeConfig(runtime)))
+handle('device:track', (_event, runtime: RuntimeConfig) => startDeviceTracker(runtimeConfig(runtime)))
+handle('device:visibility', (_event, visible: boolean) => setDeviceTrackerVisibility(strictBoolean(visible, 'window visibility')))
 handle('device:connect', (_event, runtime: RuntimeConfig, target: string) =>
   connectDevice(runtimeConfig(runtime), boundedString(target, 'wireless target', 512))
 )
@@ -322,6 +332,7 @@ app.on('before-quit', (event) => {
   isQuitting = true
   globalShortcut.unregisterAll()
   stopAllScrcpy()
+  stopDeviceTracker()
   if (killAdbOnQuit && !shutdownStarted) {
     event.preventDefault()
     shutdownStarted = true
