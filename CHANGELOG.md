@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 2.4.1
+
+This licensing-only patch release applies the MIT License prospectively to Scrcpy GUI while preserving the separate licenses and notices of the bundled official scrcpy runtime. Releases through v2.4.0 remain under GPL-3.0-only.
+
+### Changed
+
+- Replace the project license with the OSI-approved MIT text after auditing contribution provenance and obtaining the required contributor consent.
+- Package the Scrcpy GUI license and third-party notice as visible resources, and fail packaged-runtime smoke checks when either the GUI MIT text or bundled scrcpy Apache-2.0 text is missing.
+- Remove an unused legacy tray icon that was the only remaining current-tree artifact from an otherwise removed external contribution.
+
 ## 2.4.0
 
 This is the first stable release of the rebuilt Scrcpy GUI. It completes the M0–M4 software roadmap with the scrcpy 4.1 scene model, device workspace, local diagnostics, device groups, and bounded multi-device automation. See the release smoke report for the hardware, signing, and installer verification gaps that remain explicit rather than inferred.

@@ -9,7 +9,7 @@
   <a href="https://github.com/SimonAKing/scrcpy-gui/actions/workflows/validate.yml"><img src="https://github.com/SimonAKing/scrcpy-gui/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/v/release/SimonAKing/scrcpy-gui?style=flat-square" alt="Latest stable release"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/downloads/SimonAKing/scrcpy-gui/total.svg?style=flat-square" alt="Downloads"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/SimonAKing/scrcpy-gui?style=flat-square" alt="GPL-3.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/SimonAKing/scrcpy-gui?style=flat-square" alt="MIT"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat-square" alt="Contributions welcome"></a>
 </p>
 
@@ -207,4 +207,4 @@ If Scrcpy GUI is useful to you, starring the repository, reporting a reproducibl
 
 ## License
 
-Scrcpy GUI is licensed under [GNU GPLv3](LICENSE). Scrcpy is a separate project distributed under its own license.
+Scrcpy GUI releases from v2.4.1 onward are licensed under the [MIT License](LICENSE). Tagged releases through v2.4.0 remain available under the GPL-3.0-only license that accompanied them. Bundled scrcpy remains a separate project under its own license; see [third-party notices](THIRD_PARTY_NOTICES.md).

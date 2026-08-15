@@ -9,7 +9,7 @@
   <a href="https://github.com/SimonAKing/scrcpy-gui/actions/workflows/validate.yml"><img src="https://github.com/SimonAKing/scrcpy-gui/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/v/release/SimonAKing/scrcpy-gui?style=flat-square" alt="最新稳定版"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/downloads/SimonAKing/scrcpy-gui/total.svg?style=flat-square" alt="下载量"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/SimonAKing/scrcpy-gui?style=flat-square" alt="GPL-3.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/SimonAKing/scrcpy-gui?style=flat-square" alt="MIT"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat-square" alt="欢迎贡献"></a>
 </p>
 
@@ -207,4 +207,4 @@ npm run build:dir
 
 ## 许可证
 
-Scrcpy GUI 使用 [GNU GPLv3](LICENSE)。scrcpy 是独立项目，遵循其自身许可证。
+Scrcpy GUI 自 v2.4.1 起使用 [MIT License](LICENSE)。v2.4.0 及更早的已发布版本继续遵循其发布时附带的 GPL-3.0-only 许可。内置 scrcpy 仍是遵循其自身许可证的独立项目，详见[第三方声明](THIRD_PARTY_NOTICES.md)。

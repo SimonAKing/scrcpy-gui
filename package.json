@@ -1,6 +1,6 @@
 {
   "name": "scrcpy-gui",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "A modern, secure desktop GUI for scrcpy",
   "author": "Simon Ma <simon@tomotoes.com>",
   "homepage": "https://github.com/SimonAKing/scrcpy-gui",
@@ -10,7 +10,7 @@
   },
   "bugs": "https://github.com/SimonAKing/scrcpy-gui/issues",
   "desktopName": "scrcpy-gui.desktop",
-  "license": "GPL-3.0-only",
+  "license": "MIT",
   "private": true,
   "main": "out/main/main.js",
   "scripts": {
@@ -58,6 +58,14 @@
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "LICENSE",
+        "to": "LICENSE.scrcpy-gui.txt"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      },
       {
         "from": "build/icons/16x16.png",
         "to": "icons/tray.png"
