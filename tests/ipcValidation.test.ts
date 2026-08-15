@@ -7,6 +7,7 @@ import {
   controlAction,
   deviceLaunches,
   deviceSerial,
+  deviceSerials,
   launchConfig,
   nonNegativeInteger,
   runtimeConfig,
@@ -31,6 +32,7 @@ describe('IPC scalar validation', () => {
     expect(boundedString('device', 'name', 20)).toBe('device')
     expect(strictBoolean(false, 'enabled')).toBe(false)
     expect(deviceSerial('ABC123')).toBe('ABC123')
+    expect(deviceSerials(['ABC123', 'ABC123', 'SECOND'])).toEqual(['ABC123', 'SECOND'])
     expect(controlAction('home')).toBe('home')
     expect(nonNegativeInteger(0, 'revision')).toBe(0)
   })
@@ -40,6 +42,8 @@ describe('IPC scalar validation', () => {
     expect(() => boundedString('bad\0value', 'name', 20)).toThrow('null bytes')
     expect(() => deviceSerial('')).toThrow('1 to 512')
     expect(() => deviceSerial('x'.repeat(513))).toThrow('1 to 512')
+    expect(() => deviceSerials([])).toThrow('1 to 20')
+    expect(() => deviceSerials(Array.from({ length: 21 }, (_, index) => `device-${index}`))).toThrow('1 to 20')
     expect(() => controlAction('shell')).toThrow('not supported')
     expect(() => nonNegativeInteger(-1, 'revision')).toThrow('non-negative safe integer')
     expect(() => nonNegativeInteger(1.5, 'revision')).toThrow('non-negative safe integer')

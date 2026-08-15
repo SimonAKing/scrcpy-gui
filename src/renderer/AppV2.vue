@@ -6,12 +6,19 @@ import type {
   AppEvent,
   AppEventDomain,
   AppEventLevel,
+  ApkInstallResult,
+  BatchItemResult,
+  BatchProgressEvent,
   CapabilitySnapshot,
   CommandPreview,
   Device,
   DeviceControlAction,
+  DeviceOverview,
   DeviceTrackerEvent,
   EnvironmentStatus,
+  FileConflictPolicy,
+  FileTransferResult,
+  InstalledApp,
   LaunchConfig,
   LaunchProfile,
   PersistedConfig,
@@ -27,6 +34,7 @@ import { translate } from './i18n'
 
 type Tab = 'devices' | 'sessions' | 'settings' | 'logs'
 type SettingsSection = 'general' | 'video' | 'controls' | 'recording' | 'geometry' | 'advanced'
+type WorkspaceSection = 'overview' | 'control' | 'apps' | 'files'
 type ToastKind = 'success' | 'error' | 'info'
 
 interface Toast {
@@ -86,6 +94,20 @@ const pairTarget = ref('')
 const pairingCode = ref('')
 const profileName = ref('')
 const controlSerial = ref('')
+const workspaceSection = ref<WorkspaceSection>('overview')
+const deviceOverview = ref<DeviceOverview | null>(null)
+const loadingOverview = ref(false)
+const installedApps = ref<InstalledApp[]>([])
+const loadingApps = ref(false)
+const appSearch = ref('')
+const showSystemApps = ref(false)
+const fileTarget = ref(config.launch.pushTarget || '/sdcard/Download/')
+const fileConflict = ref<FileConflictPolicy>('replace')
+const installReplace = ref(true)
+const installDowngrade = ref(false)
+const workspaceBusy = ref(false)
+const workspaceResults = ref<Array<BatchItemResult<FileTransferResult | ApkInstallResult>>>([])
+const workspaceProgress = ref<BatchProgressEvent[]>([])
 const recordingAutomation = ref(false)
 const recordedSteps = ref<AutomationStep[]>([])
 const automationName = ref('')
@@ -99,6 +121,7 @@ let removeStatusListener: (() => void) | undefined
 let removeSessionListener: (() => void) | undefined
 let removeDeviceListener: (() => void) | undefined
 let removeAppEventListener: (() => void) | undefined
+let removeBatchProgressListener: (() => void) | undefined
 let lastRecordedActionAt = 0
 let configRevision = 0
 let configReady = false
@@ -121,6 +144,16 @@ const allSelected = computed(() =>
   usableDevices.value.length > 0 && usableDevices.value.every((device) => selectedSerials.value.includes(device.serial))
 )
 const controlDevice = computed(() => devices.value.find((device) => device.serial === controlSerial.value))
+const workspaceTargets = computed(() => {
+  const available = new Set(usableDevices.value.map((device) => device.serial))
+  const selected = selectedSerials.value.filter((serial) => available.has(serial))
+  return selected.length ? selected : controlSerial.value ? [controlSerial.value] : []
+})
+const visibleApps = computed(() => {
+  const query = appSearch.value.trim().toLocaleLowerCase()
+  return installedApps.value.filter((item) => item.launchable && (showSystemApps.value || !item.system) &&
+    (!query || item.packageId.toLocaleLowerCase().includes(query) || item.label.toLocaleLowerCase().includes(query)))
+})
 const settingsSections: SettingsSection[] = ['general', 'video', 'controls', 'recording', 'geometry', 'advanced']
 const capabilityFeatureKeys: Array<keyof CapabilitySnapshot['features']> = [
   'screen', 'camera', 'virtualDisplay', 'recordOnly', 'controlOnly', 'otg', 'v4l2', 'appLaunch'
@@ -195,6 +228,13 @@ watch(usableDevices, (nextDevices) => {
   if (!nextDevices.some((device) => device.serial === controlSerial.value)) {
     controlSerial.value = nextDevices[0]?.serial || ''
   }
+})
+
+watch(controlSerial, () => {
+  deviceOverview.value = null
+  installedApps.value = []
+  workspaceResults.value = []
+  if (controlSerial.value) void loadDeviceOverview()
 })
 
 function toast(kind: ToastKind, message: string): void {
@@ -376,6 +416,100 @@ async function disconnect(serial: string): Promise<void> {
   }
   toast('success', t('disconnected'))
   await refreshDevices()
+}
+
+async function setWorkspaceSection(section: WorkspaceSection): Promise<void> {
+  workspaceSection.value = section
+  workspaceResults.value = []
+  if (section === 'overview' && !deviceOverview.value) await loadDeviceOverview()
+  if (section === 'apps' && !installedApps.value.length) await loadInstalledApps()
+}
+
+async function loadDeviceOverview(): Promise<void> {
+  if (!controlSerial.value || loadingOverview.value) return
+  loadingOverview.value = true
+  const result = await window.scrcpy.getDeviceOverview(runtimeSnapshot(), controlSerial.value)
+  loadingOverview.value = false
+  if (result.ok) deviceOverview.value = result.data || null
+  else toast('error', operationErrorMessage(result, t('deviceOverviewFailed')))
+}
+
+async function loadInstalledApps(refresh = false): Promise<void> {
+  if (!controlSerial.value || loadingApps.value) return
+  loadingApps.value = true
+  const result = await window.scrcpy.listApps(runtimeSnapshot(), controlSerial.value, refresh)
+  loadingApps.value = false
+  if (result.ok) installedApps.value = result.data || []
+  else toast('error', operationErrorMessage(result, t('appListFailed')))
+}
+
+async function startInstalledApp(app: InstalledApp): Promise<void> {
+  if (!controlSerial.value) return
+  const result = await window.scrcpy.startApp(runtimeSnapshot(), controlSerial.value, app.packageId)
+  if (result.ok) toast('success', `${t('appStarted')} ${app.packageId}`)
+  else toast('error', operationErrorMessage(result, t('appStartFailed')))
+}
+
+function summarizeWorkspaceResults(): void {
+  const failed = workspaceResults.value.filter((result) => !result.ok).length
+  const skipped = workspaceResults.value.filter((result) =>
+    result.ok && result.data && 'skipped' in result.data && result.data.skipped
+  ).length
+  if (failed) toast('error', `${failed} ${t('batchItemsFailed')}`)
+  else toast('success', `${workspaceResults.value.length - skipped} ${t('batchItemsCompleted')}${skipped ? ` · ${skipped} ${t('skipped')}` : ''}`)
+}
+
+async function pushSelectedFiles(): Promise<void> {
+  if (!workspaceTargets.value.length || workspaceBusy.value) return
+  workspaceResults.value = []
+  workspaceProgress.value = []
+  workspaceBusy.value = true
+  const result = await window.scrcpy.pushFiles(runtimeSnapshot(), workspaceTargets.value, fileTarget.value, fileConflict.value)
+  workspaceBusy.value = false
+  if (!result.ok) {
+    if (result.error?.code !== 'FILE_SELECTION_CANCELED') toast('error', operationErrorMessage(result, t('filePushFailed')))
+    return
+  }
+  config.launch.pushTarget = fileTarget.value
+  workspaceResults.value = result.data?.results || []
+  summarizeWorkspaceResults()
+}
+
+async function installSelectedApk(): Promise<void> {
+  if (!workspaceTargets.value.length || workspaceBusy.value) return
+  if (installDowngrade.value && !window.confirm(t('confirmDowngrade'))) return
+  workspaceResults.value = []
+  workspaceProgress.value = []
+  workspaceBusy.value = true
+  const result = await window.scrcpy.installApk(
+    runtimeSnapshot(), workspaceTargets.value, installReplace.value, installDowngrade.value
+  )
+  workspaceBusy.value = false
+  if (!result.ok) {
+    if (result.error?.code !== 'APK_SELECTION_CANCELED') toast('error', operationErrorMessage(result, t('apkInstallFailed')))
+    return
+  }
+  workspaceResults.value = result.data?.results || []
+  summarizeWorkspaceResults()
+}
+
+function workspaceResultMessage(result: BatchItemResult<FileTransferResult | ApkInstallResult>): string {
+  if (!result.ok) return result.error?.message || t('operationFailed')
+  if (result.data && 'skipped' in result.data && result.data.skipped) return t('skippedExisting')
+  return result.data?.output || t('completed')
+}
+
+function handleBatchProgress(event: BatchProgressEvent): void {
+  if (workspaceProgress.value.length && workspaceProgress.value[0].batchId !== event.batchId) workspaceProgress.value = []
+  const index = workspaceProgress.value.findIndex((item) => item.targetId === event.targetId)
+  if (index >= 0) workspaceProgress.value[index] = event
+  else workspaceProgress.value.push(event)
+}
+
+function formatBytes(size: number): string {
+  if (size < 1_024) return `${size} B`
+  if (size < 1_024 * 1_024) return `${(size / 1_024).toFixed(1)} KiB`
+  return `${(size / (1_024 * 1_024)).toFixed(1)} MiB`
 }
 
 async function chooseRecordPath(): Promise<void> {
@@ -608,6 +742,7 @@ onMounted(async () => {
   removeSessionListener = window.scrcpy.onSession(handleSession)
   removeDeviceListener = window.scrcpy.onDevices((event) => void handleDeviceEvent(event))
   removeAppEventListener = window.scrcpy.onEvent(handleAppEvent)
+  removeBatchProgressListener = window.scrcpy.onBatchProgress(handleBatchProgress)
   const historicalEvents = await window.scrcpy.listEvents({ limit: 1_000 })
   const liveEventIds = new Set(logs.value.map((event) => event.id))
   logs.value.unshift(...historicalEvents.filter((event) => !liveEventIds.has(event.id)))
@@ -636,6 +771,7 @@ onBeforeUnmount(() => {
   removeSessionListener?.()
   removeDeviceListener?.()
   removeAppEventListener?.()
+  removeBatchProgressListener?.()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
@@ -744,34 +880,103 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section v-if="usableDevices.length" class="panel control-panel">
+        <section v-if="usableDevices.length" class="panel control-panel device-workspace">
           <div class="panel-title">
-            <div><p class="eyebrow">{{ t('controlPanel') }}</p><p class="muted">{{ t('controlPanelHint') }}</p></div>
+            <div><p class="eyebrow">{{ t('deviceWorkspace') }}</p><p class="muted">{{ t('deviceWorkspaceHint') }}</p></div>
             <select v-model="controlSerial" :disabled="!usableDevices.length">
               <option value="">{{ t('chooseDevice') }}</option>
               <option v-for="device in usableDevices" :key="device.serial" :value="device.serial">{{ config.deviceAliases[device.serial] || device.model }} · {{ device.serial }}</option>
             </select>
           </div>
-          <div class="control-actions">
-            <button v-for="action in controlActions" :key="action" class="ghost" :disabled="!controlDevice || recordingAutomation && !!replayingAutomation" @click="sendControlAction(action)">{{ actionLabel(action) }}</button>
-            <button class="secondary" :disabled="!controlDevice" @click="takeScreenshot">{{ t('screenshot') }}</button>
+          <nav class="workspace-tabs" :aria-label="t('deviceWorkspace')">
+            <button v-for="section in (['overview', 'control', 'apps', 'files'] as WorkspaceSection[])" :key="section" :class="{ active: workspaceSection === section }" :disabled="!controlDevice" @click="setWorkspaceSection(section)">{{ t(`workspace_${section}`) }}</button>
+          </nav>
+
+          <div v-if="workspaceSection === 'overview'" class="workspace-pane overview-pane">
+            <p v-if="loadingOverview" class="muted">{{ t('loadingDeviceDetails') }}</p>
+            <template v-else-if="deviceOverview">
+              <div class="overview-grid">
+                <div><span>{{ t('manufacturer') }}</span><strong>{{ deviceOverview.manufacturer || '—' }}</strong></div>
+                <div><span>{{ t('model') }}</span><strong>{{ deviceOverview.model || '—' }}</strong></div>
+                <div><span>Android</span><strong>{{ deviceOverview.androidVersion || '—' }} <small v-if="deviceOverview.sdk">API {{ deviceOverview.sdk }}</small></strong></div>
+                <div><span>{{ t('display') }}</span><strong>{{ deviceOverview.displaySize || '—' }}</strong></div>
+                <div><span>ABI</span><strong>{{ deviceOverview.abi || '—' }}</strong></div>
+                <div><span>{{ t('battery') }}</span><strong>{{ deviceOverview.batteryLevel === undefined ? '—' : `${deviceOverview.batteryLevel}%` }}</strong></div>
+              </div>
+              <button class="ghost compact" @click="loadDeviceOverview">{{ t('refreshDetails') }}</button>
+            </template>
           </div>
-          <div class="automation-bar">
-            <div><strong>{{ t('automation') }}</strong><small>{{ t('automationHint') }}</small></div>
-            <div class="button-row nowrap">
-              <button v-if="!recordingAutomation" class="secondary compact" :disabled="!controlDevice || !!replayingAutomation" @click="startAutomationRecording">{{ t('startRecordingActions') }}</button>
-              <button v-else class="danger compact recording" @click="stopAutomationRecording">{{ t('stopRecordingActions') }} · {{ recordedSteps.length }}</button>
+
+          <div v-if="workspaceSection === 'control'" class="workspace-pane">
+            <div class="control-actions">
+              <button v-for="action in controlActions" :key="action" class="ghost" :disabled="!controlDevice || recordingAutomation && !!replayingAutomation" @click="sendControlAction(action)">{{ actionLabel(action) }}</button>
+              <button class="secondary" :disabled="!controlDevice" @click="takeScreenshot">{{ t('screenshot') }}</button>
+            </div>
+            <div class="automation-bar">
+              <div><strong>{{ t('automation') }}</strong><small>{{ t('automationHint') }}</small></div>
+              <div class="button-row nowrap">
+                <button v-if="!recordingAutomation" class="secondary compact" :disabled="!controlDevice || !!replayingAutomation" @click="startAutomationRecording">{{ t('startRecordingActions') }}</button>
+                <button v-else class="danger compact recording" @click="stopAutomationRecording">{{ t('stopRecordingActions') }} · {{ recordedSteps.length }}</button>
+              </div>
+            </div>
+            <div v-if="recordedSteps.length && !recordingAutomation" class="inline-form automation-save">
+              <input v-model.trim="automationName" :placeholder="t('automationName')" />
+              <button class="secondary" @click="saveAutomation">{{ t('save') }}</button>
+              <button class="ghost" @click="recordedSteps = []">{{ t('discard') }}</button>
+            </div>
+            <div v-if="config.automations.length" class="saved-list">
+              <div v-for="macro in config.automations" :key="macro.id" class="saved-row">
+                <span><strong>{{ macro.name }}</strong><small>{{ macro.steps.length }} {{ t('actions') }}</small></span>
+                <div class="button-row nowrap"><button class="secondary compact" :disabled="!controlDevice || !!replayingAutomation" @click="replayAutomation(macro)">{{ replayingAutomation === macro.id ? t('replaying') : t('replay') }}</button><button class="ghost compact" :disabled="!!replayingAutomation" @click="deleteAutomation(macro.id)">{{ t('delete') }}</button></div>
+              </div>
             </div>
           </div>
-          <div v-if="recordedSteps.length && !recordingAutomation" class="inline-form automation-save">
-            <input v-model.trim="automationName" :placeholder="t('automationName')" />
-            <button class="secondary" @click="saveAutomation">{{ t('save') }}</button>
-            <button class="ghost" @click="recordedSteps = []">{{ t('discard') }}</button>
+
+          <div v-if="workspaceSection === 'apps'" class="workspace-pane">
+            <div class="workspace-toolbar">
+              <input v-model.trim="appSearch" type="search" :placeholder="t('searchApps')" />
+              <label class="inline-check"><input v-model="showSystemApps" type="checkbox" /><span>{{ t('showSystemApps') }}</span></label>
+              <button class="ghost" :disabled="loadingApps" @click="loadInstalledApps(true)">{{ t('refresh') }}</button>
+            </div>
+            <p v-if="loadingApps" class="muted">{{ t('loadingApps') }}</p>
+            <div v-else-if="visibleApps.length" class="app-list">
+              <div v-for="app in visibleApps" :key="app.packageId" class="app-row">
+                <span><strong>{{ app.label }}</strong><code>{{ app.packageId }}</code></span>
+                <span v-if="app.system" class="app-badge">{{ t('systemApp') }}</span>
+                <button class="secondary compact" @click="startInstalledApp(app)">{{ t('startApp') }}</button>
+              </div>
+            </div>
+            <p v-else class="muted">{{ t('noApps') }}</p>
           </div>
-          <div v-if="config.automations.length" class="saved-list">
-            <div v-for="macro in config.automations" :key="macro.id" class="saved-row">
-              <span><strong>{{ macro.name }}</strong><small>{{ macro.steps.length }} {{ t('actions') }}</small></span>
-              <div class="button-row nowrap"><button class="secondary compact" :disabled="!controlDevice || !!replayingAutomation" @click="replayAutomation(macro)">{{ replayingAutomation === macro.id ? t('replaying') : t('replay') }}</button><button class="ghost compact" :disabled="!!replayingAutomation" @click="deleteAutomation(macro.id)">{{ t('delete') }}</button></div>
+
+          <div v-if="workspaceSection === 'files'" class="workspace-pane">
+            <p class="workspace-target-summary">{{ t('batchTargets') }}: <strong>{{ workspaceTargets.length }}</strong> · {{ t('selectedDevicesTakePriority') }}</p>
+            <div class="file-actions-grid">
+              <div class="file-action-card">
+                <div><strong>{{ t('pushFiles') }}</strong><small>{{ t('pushFilesHint') }}</small></div>
+                <label><span>{{ t('targetDirectory') }}</span><input v-model.trim="fileTarget" placeholder="/sdcard/Download/" /></label>
+                <label><span>{{ t('existingFile') }}</span><select v-model="fileConflict"><option value="replace">{{ t('replace') }}</option><option value="skip">{{ t('skip') }}</option></select></label>
+                <button class="secondary" :disabled="workspaceBusy || !workspaceTargets.length || !fileTarget" @click="pushSelectedFiles">{{ t('chooseAndPush') }}</button>
+              </div>
+              <div class="file-action-card">
+                <div><strong>{{ t('installApk') }}</strong><small>{{ t('installApkHint') }}</small></div>
+                <label class="toggle"><input v-model="installReplace" type="checkbox" /><span>{{ t('replaceExistingApp') }}</span></label>
+                <label class="toggle warning-toggle"><input v-model="installDowngrade" type="checkbox" /><span>{{ t('allowDowngrade') }}</span></label>
+                <button class="secondary" :disabled="workspaceBusy || !workspaceTargets.length" @click="installSelectedApk">{{ t('chooseAndInstall') }}</button>
+              </div>
+            </div>
+            <div v-if="workspaceResults.length" class="batch-results">
+              <div v-for="result in workspaceResults" :key="result.targetId" :class="['batch-result', result.ok ? 'ok' : 'failed']">
+                <span><strong>{{ result.targetId }}</strong><small v-if="result.data">{{ formatBytes(result.data.size) }}</small></span>
+                <p>{{ workspaceResultMessage(result) }}</p>
+                <details v-if="result.error?.detail"><summary>{{ t('errorDetails') }}</summary><code>{{ result.error.detail }}</code></details>
+              </div>
+            </div>
+            <div v-else-if="workspaceProgress.length" class="batch-results" aria-live="polite">
+              <div v-for="progress in workspaceProgress" :key="progress.targetId" :class="['batch-result', progress.status === 'failed' ? 'failed' : 'ok']">
+                <span><strong>{{ progress.targetId }}</strong><small v-if="progress.size !== undefined">{{ formatBytes(progress.size) }}</small></span>
+                <p>{{ progress.status }} · {{ progress.message }}</p>
+              </div>
             </div>
           </div>
         </section>
