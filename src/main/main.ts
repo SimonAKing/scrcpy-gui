@@ -1,13 +1,24 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
 import { join } from 'node:path'
-import type { LaunchConfig, RuntimeConfig, ScrcpyStatusEvent } from '../shared/types'
+import type {
+  AutomationStep,
+  DeviceControlAction,
+  DeviceLaunch,
+  OperationResult,
+  RuntimeConfig,
+  ScrcpyStatusEvent
+} from '../shared/types'
 import {
+  captureDeviceScreenshot,
   connectDevice,
+  controlDevice,
   disconnectDevice,
   getEnvironment,
   listDevices,
   pairDevice,
+  runDeviceAutomation,
   startScrcpy,
+  stopAdbServer,
   stopAllScrcpy,
   stopScrcpy
 } from './processes'
@@ -16,6 +27,10 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let minimizeToTray = false
 let isQuitting = false
+let registeredBossKey = ''
+let killAdbOnQuit = false
+let quitRuntime: RuntimeConfig = { scrcpyPath: '' }
+let shutdownStarted = false
 
 function sendStatus(status: ScrcpyStatusEvent): void {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('scrcpy:status', status)
@@ -79,10 +94,39 @@ function createTray(): void {
   tray.on('click', () => mainWindow?.show())
 }
 
+function setBossKey(enabled: boolean, accelerator: string): OperationResult<string> {
+  if (registeredBossKey) {
+    globalShortcut.unregister(registeredBossKey)
+    registeredBossKey = ''
+  }
+  if (!enabled) return { ok: true, data: 'Boss key disabled.' }
+
+  const shortcut = accelerator.trim()
+  if (!shortcut) return { ok: false, error: 'Enter a boss key shortcut.' }
+  try {
+    const registered = globalShortcut.register(shortcut, () => {
+      stopAllScrcpy()
+      mainWindow?.hide()
+    })
+    if (!registered) return { ok: false, error: `The shortcut ${shortcut} is already in use.` }
+    registeredBossKey = shortcut
+    return { ok: true, data: shortcut }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 ipcMain.handle('app:version', () => app.getVersion())
 ipcMain.handle('app:minimize-to-tray', (_event, enabled: boolean) => {
   minimizeToTray = Boolean(enabled)
 })
+ipcMain.handle('app:quit-behavior', (_event, runtime: RuntimeConfig, shouldKillAdb: boolean) => {
+  quitRuntime = { scrcpyPath: String(runtime?.scrcpyPath || '') }
+  killAdbOnQuit = Boolean(shouldKillAdb)
+})
+ipcMain.handle('app:boss-key', (_event, enabled: boolean, accelerator: string) =>
+  setBossKey(Boolean(enabled), String(accelerator || ''))
+)
 ipcMain.handle('dialog:scrcpy', async () => {
   const result = await dialog.showOpenDialog({
     title: 'Choose the scrcpy executable',
@@ -102,6 +146,14 @@ ipcMain.handle('dialog:record', async () => {
   })
   return result.canceled ? '' : result.filePath || ''
 })
+ipcMain.handle('dialog:record-directory', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Choose recording folder',
+    defaultPath: app.getPath('videos'),
+    properties: ['openDirectory', 'createDirectory']
+  })
+  return result.canceled ? '' : result.filePaths[0] || ''
+})
 ipcMain.handle('system:environment', (_event, runtime: RuntimeConfig) => getEnvironment(runtime))
 ipcMain.handle('device:list', (_event, runtime: RuntimeConfig) => listDevices(runtime))
 ipcMain.handle('device:connect', (_event, runtime: RuntimeConfig, target: string) => connectDevice(runtime, target))
@@ -113,10 +165,31 @@ ipcMain.handle('device:disconnect', (_event, runtime: RuntimeConfig, target: str
 )
 ipcMain.handle(
   'scrcpy:start',
-  (_event, runtime: RuntimeConfig, launch: LaunchConfig, serials: string[]) =>
-    startScrcpy(runtime, launch, serials, sendStatus)
+  (_event, runtime: RuntimeConfig, launches: DeviceLaunch[]) =>
+    startScrcpy(runtime, launches, sendStatus)
 )
 ipcMain.handle('scrcpy:stop', (_event, serial: string) => stopScrcpy(serial))
+ipcMain.handle(
+  'device:control',
+  (_event, runtime: RuntimeConfig, serial: string, action: DeviceControlAction) =>
+    controlDevice(runtime, serial, action)
+)
+ipcMain.handle('device:screenshot', async (_event, runtime: RuntimeConfig, serial: string) => {
+  const safeSerial = serial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
+  const timestamp = new Date().toISOString().replaceAll(':', '-').slice(0, 19)
+  const result = await dialog.showSaveDialog({
+    title: 'Save device screenshot',
+    defaultPath: join(app.getPath('pictures'), `scrcpy-${safeSerial}-${timestamp}.png`),
+    filters: [{ name: 'PNG image', extensions: ['png'] }]
+  })
+  if (result.canceled || !result.filePath) return { ok: false, error: 'Screenshot canceled.' }
+  return captureDeviceScreenshot(runtime, serial, result.filePath)
+})
+ipcMain.handle(
+  'device:automation',
+  (_event, runtime: RuntimeConfig, serial: string, steps: AutomationStep[]) =>
+    runDeviceAutomation(runtime, serial, steps)
+)
 ipcMain.handle('shell:open', async (_event, rawUrl: string) => {
   const url = new URL(rawUrl)
   const allowedHosts = new Set(['github.com', 'scrcpyapp.org'])
@@ -133,9 +206,15 @@ app.whenReady().then(() => {
   })
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   isQuitting = true
+  globalShortcut.unregisterAll()
   stopAllScrcpy()
+  if (killAdbOnQuit && !shutdownStarted) {
+    event.preventDefault()
+    shutdownStarted = true
+    void stopAdbServer(quitRuntime).finally(() => app.quit())
+  }
 })
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

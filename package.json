@@ -1,6 +1,6 @@
 {
   "name": "scrcpy-gui",
-  "version": "2.0.0-beta.1",
+  "version": "2.0.0-beta.2",
   "description": "A modern, secure desktop GUI for scrcpy",
   "author": "Simon Ma <simon@tomotoes.com>",
   "homepage": "https://github.com/SimonAKing/scrcpy-gui",
@@ -20,11 +20,12 @@
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "build": "npm run typecheck && electron-vite build",
-    "build:dir": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder --publish never",
-    "dist:mac": "npm run build && electron-builder --mac --x64 --arm64 --publish never",
-    "dist:win": "npm run build && electron-builder --win --x64 --publish never",
-    "dist:linux": "npm run build && electron-builder --linux --x64 --publish never"
+    "prepare:scrcpy": "node scripts/fetch-scrcpy.mjs",
+    "build:dir": "npm run build && npm run prepare:scrcpy && electron-builder --dir",
+    "dist": "npm run build && npm run prepare:scrcpy && electron-builder --publish never",
+    "dist:mac": "npm run build && node scripts/fetch-scrcpy.mjs darwin && electron-builder --mac --x64 --arm64 --publish never",
+    "dist:win": "npm run build && node scripts/fetch-scrcpy.mjs win32 && electron-builder --win --x64 --ia32 --publish never",
+    "dist:linux": "npm run build && node scripts/fetch-scrcpy.mjs linux && electron-builder --linux --x64 --publish never"
   },
   "dependencies": {
     "vue": "^3.5.41"
@@ -56,6 +57,10 @@
       {
         "from": "build/icons/16x16.png",
         "to": "icons/tray.png"
+      },
+      {
+        "from": "vendor/scrcpy-${arch}",
+        "to": "scrcpy"
       }
     ],
     "asar": true,
@@ -86,7 +91,9 @@
       "syncDesktopName": true,
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "pacman",
+        "tar.gz"
       ]
     }
   }

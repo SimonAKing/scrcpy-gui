@@ -3,6 +3,7 @@ dist/electron/*
 dist/web/*
 out/
 release/
+vendor/
 build/*
 !build/icons
 !build/installer.nsh

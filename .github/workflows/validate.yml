@@ -24,3 +24,6 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Validate Chocolatey metadata
+        if: runner.os == 'Windows'
+        run: choco pack packaging/chocolatey/scrcpy-gui.nuspec --version 0.0.0-ci --outputdirectory release
