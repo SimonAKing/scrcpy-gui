@@ -1,0 +1,213 @@
+name: Installer lifecycle smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      previous_version:
+        description: Previously published version to install first
+        required: true
+        default: 2.0.0-beta.6
+      current_version:
+        description: Published version to upgrade to and uninstall
+        required: true
+        default: 2.4.0
+
+permissions:
+  contents: read
+
+env:
+  PREVIOUS_VERSION: ${{ inputs.previous_version }}
+  CURRENT_VERSION: ${{ inputs.current_version }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - name: Download and verify published DMGs
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_pattern='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+          [[ "$PREVIOUS_VERSION" =~ $version_pattern ]]
+          [[ "$CURRENT_VERSION" =~ $version_pattern ]]
+
+          case "$(uname -m)" in
+            arm64) package_arch='arm64' ;;
+            x86_64) package_arch='x64' ;;
+            *) echo "Unsupported macOS runner architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          previous_asset="Scrcpy.GUI-${PREVIOUS_VERSION}-mac-${package_arch}.dmg"
+          current_asset="Scrcpy.GUI-${CURRENT_VERSION}-mac-${package_arch}.dmg"
+          mkdir downloads
+          gh release download "v${PREVIOUS_VERSION}" --repo "$GITHUB_REPOSITORY" --pattern "$previous_asset" --dir downloads
+          gh release download "v${CURRENT_VERSION}" --repo "$GITHUB_REPOSITORY" --pattern "$current_asset" --pattern SHA256SUMS.txt --dir downloads
+
+          expected="$(awk -v asset="$current_asset" '$2 == asset { print $1 }' downloads/SHA256SUMS.txt)"
+          actual="$(shasum -a 256 "downloads/$current_asset" | awk '{ print $1 }')"
+          [[ -n "$expected" && "$actual" == "$expected" ]]
+          echo "PACKAGE_ARCH=$package_arch" >> "$GITHUB_ENV"
+
+      - name: Install, upgrade, and uninstall
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='/Applications/Scrcpy GUI.app'
+          active_mount=''
+
+          cleanup() {
+            if [[ -n "$active_mount" ]]; then
+              hdiutil detach "$active_mount" -quiet || true
+            fi
+            sudo rm -rf '/Applications/Scrcpy GUI.app'
+          }
+          trap cleanup EXIT
+
+          install_dmg() {
+            local dmg="$1"
+            local expected_version="$2"
+            active_mount="$(mktemp -d /tmp/scrcpy-gui-dmg.XXXXXX)"
+            hdiutil attach -readonly -nobrowse -mountpoint "$active_mount" "$dmg" -quiet
+            test -d "$active_mount/Scrcpy GUI.app"
+            sudo ditto "$active_mount/Scrcpy GUI.app" "$target"
+            hdiutil detach "$active_mount" -quiet
+            active_mount=''
+            actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$target/Contents/Info.plist")"
+            [[ "$actual_version" == "$expected_version" ]]
+          }
+
+          sudo rm -rf '/Applications/Scrcpy GUI.app'
+          install_dmg "downloads/Scrcpy.GUI-${PREVIOUS_VERSION}-mac-${PACKAGE_ARCH}.dmg" "$PREVIOUS_VERSION"
+          install_dmg "downloads/Scrcpy.GUI-${CURRENT_VERSION}-mac-${PACKAGE_ARCH}.dmg" "$CURRENT_VERSION"
+
+          "$target/Contents/Resources/scrcpy/scrcpy" --version | grep -E '^scrcpy 4\.1'
+          "$target/Contents/Resources/scrcpy/adb" version | grep -E '^Android Debug Bridge version 1\.0\.41'
+
+          sudo rm -rf '/Applications/Scrcpy GUI.app'
+          test ! -e "$target"
+          trap - EXIT
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Download and verify published NSIS installers
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $versionPattern = '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+          if ($env:PREVIOUS_VERSION -notmatch $versionPattern -or $env:CURRENT_VERSION -notmatch $versionPattern) {
+            throw 'Invalid version input.'
+          }
+
+          $previousAsset = "Scrcpy.GUI-$env:PREVIOUS_VERSION-win-x64.exe"
+          $currentAsset = "Scrcpy.GUI-$env:CURRENT_VERSION-win-x64.exe"
+          New-Item -ItemType Directory -Path downloads | Out-Null
+          gh release download "v$env:PREVIOUS_VERSION" --repo $env:GITHUB_REPOSITORY --pattern $previousAsset --dir downloads
+          gh release download "v$env:CURRENT_VERSION" --repo $env:GITHUB_REPOSITORY --pattern $currentAsset --pattern SHA256SUMS.txt --dir downloads
+
+          $manifestLine = Get-Content downloads/SHA256SUMS.txt | Where-Object { $_ -match "\s+$([regex]::Escape($currentAsset))$" }
+          if (-not $manifestLine) { throw "$currentAsset is missing from SHA256SUMS.txt." }
+          $expected = ($manifestLine -split '\s+')[0]
+          $actual = (Get-FileHash "downloads/$currentAsset" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Checksum mismatch for $currentAsset." }
+
+      - name: Install, upgrade, and uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          function Get-AppEntry {
+            $paths = @(
+              'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+              'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+              'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+            )
+            Get-ItemProperty $paths -ErrorAction SilentlyContinue |
+              Where-Object { $_.DisplayName -like 'Scrcpy GUI*' } |
+              Select-Object -First 1
+          }
+
+          function Wait-AppEntry([bool] $present) {
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              $entry = Get-AppEntry
+              if (($present -and $entry) -or (-not $present -and -not $entry)) { return $entry }
+              Start-Sleep -Seconds 1
+            }
+            throw "Timed out waiting for installer registration state: present=$present"
+          }
+
+          function Install-Version([string] $version) {
+            $installer = Resolve-Path "downloads/Scrcpy.GUI-$version-win-x64.exe"
+            $process = Start-Process -FilePath $installer -ArgumentList '/S' -PassThru -Wait
+            if ($process.ExitCode -ne 0) { throw "Installer for $version exited with $($process.ExitCode)." }
+            $entry = Wait-AppEntry $true
+            if ($entry.DisplayVersion -ne $version) {
+              throw "Installed version $($entry.DisplayVersion) does not match $version."
+            }
+            return $entry
+          }
+
+          if (Get-AppEntry) { throw 'The hosted runner unexpectedly already has Scrcpy GUI installed.' }
+          Install-Version $env:PREVIOUS_VERSION | Out-Null
+          $current = Install-Version $env:CURRENT_VERSION
+
+          if ($current.InstallLocation) {
+            $installLocation = $current.InstallLocation
+          } elseif ($current.UninstallString -match '^"([^"]+)"') {
+            $installLocation = Split-Path $Matches[1]
+          } else {
+            throw 'Could not resolve the installed application directory.'
+          }
+          $scrcpy = Join-Path $installLocation 'resources\scrcpy\scrcpy.exe'
+          $adb = Join-Path $installLocation 'resources\scrcpy\adb.exe'
+          if ((& $scrcpy --version | Select-Object -First 1) -notmatch '^scrcpy 4\.1') { throw 'Installed scrcpy version check failed.' }
+          if ((& $adb version | Select-Object -First 1) -notmatch '^Android Debug Bridge version 1\.0\.41') { throw 'Installed adb version check failed.' }
+
+          if ($current.UninstallString -notmatch '^"([^"]+)"') { throw 'Could not parse the registered uninstaller.' }
+          $uninstaller = $Matches[1]
+          $process = Start-Process -FilePath $uninstaller -ArgumentList '/S' -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Uninstaller exited with $($process.ExitCode)." }
+          Wait-AppEntry $false | Out-Null
+          if (Test-Path $scrcpy) { throw 'Installed runtime remains after uninstall.' }
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download and verify published Debian packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_pattern='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+          [[ "$PREVIOUS_VERSION" =~ $version_pattern ]]
+          [[ "$CURRENT_VERSION" =~ $version_pattern ]]
+
+          previous_asset="Scrcpy.GUI-${PREVIOUS_VERSION}-linux-amd64.deb"
+          current_asset="Scrcpy.GUI-${CURRENT_VERSION}-linux-amd64.deb"
+          mkdir downloads
+          gh release download "v${PREVIOUS_VERSION}" --repo "$GITHUB_REPOSITORY" --pattern "$previous_asset" --dir downloads
+          gh release download "v${CURRENT_VERSION}" --repo "$GITHUB_REPOSITORY" --pattern "$current_asset" --pattern SHA256SUMS.txt --dir downloads
+
+          expected="$(awk -v asset="$current_asset" '$2 == asset { print $1 }' downloads/SHA256SUMS.txt)"
+          actual="$(sha256sum "downloads/$current_asset" | awk '{ print $1 }')"
+          [[ -n "$expected" && "$actual" == "$expected" ]]
+
+      - name: Install, upgrade, and uninstall
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes "./downloads/Scrcpy.GUI-${PREVIOUS_VERSION}-linux-amd64.deb"
+          [[ "$(dpkg-query -W -f='${Version}' scrcpy-gui)" == "$PREVIOUS_VERSION" ]]
+
+          sudo apt-get install --yes "./downloads/Scrcpy.GUI-${CURRENT_VERSION}-linux-amd64.deb"
+          [[ "$(dpkg-query -W -f='${Version}' scrcpy-gui)" == "$CURRENT_VERSION" ]]
+          runtime="$(dpkg -L scrcpy-gui | awk '/\/resources\/scrcpy\/scrcpy$/ { print; exit }')"
+          adb="$(dpkg -L scrcpy-gui | awk '/\/resources\/scrcpy\/adb$/ { print; exit }')"
+          [[ -x "$runtime" && -x "$adb" ]]
+          "$runtime" --version | grep -E '^scrcpy 4\.1'
+          "$adb" version | grep -E '^Android Debug Bridge version 1\.0\.41'
+
+          sudo apt-get remove --yes scrcpy-gui
+          status="$(dpkg-query -W -f='${db:Status-Status}' scrcpy-gui 2>/dev/null || true)"
+          [[ "$status" != 'installed' ]]
+          [[ ! -e "$runtime" ]]
