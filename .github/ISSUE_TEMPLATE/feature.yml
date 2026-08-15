@@ -1,0 +1,19 @@
+name: Feature request
+description: Propose a focused improvement
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes:
+      label: User problem
+      description: Describe the workflow that is difficult today, not only the proposed control.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Related scrcpy option or documentation

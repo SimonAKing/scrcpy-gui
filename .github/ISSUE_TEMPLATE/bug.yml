@@ -1,0 +1,50 @@
+name: Bug report
+description: Report a reproducible Scrcpy GUI problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: checkboxes
+    attributes:
+      label: Checks
+      options:
+        - label: I reproduced this with the latest Scrcpy GUI beta and scrcpy 4.x.
+          required: true
+        - label: I searched existing issues for the same error.
+          required: true
+        - label: The same device works when I run current scrcpy directly.
+          required: true
+  - type: input
+    attributes:
+      label: Scrcpy GUI version
+      placeholder: 2.0.0-beta.1
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: scrcpy version
+      placeholder: 4.1
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 x64 / macOS 15 arm64 / Ubuntu 24.04
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Android device and version
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Logs
+      description: Copy relevant output from the Logs tab. Remove secrets and private network details.
+      render: text
+    validations:
+      required: true

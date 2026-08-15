@@ -1,6 +1,8 @@
 .DS_Store
 dist/electron/*
 dist/web/*
+out/
+release/
 build/*
 !build/icons
 !build/installer.nsh
