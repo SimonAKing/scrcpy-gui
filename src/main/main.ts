@@ -33,6 +33,7 @@ import {
   strictBoolean
 } from './ipcValidation'
 import { isTrustedRendererUrl, PRODUCTION_CSP } from './security'
+import { buildScrcpyArgs } from './scrcpy'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -225,6 +226,16 @@ handle(
   (_event, runtime: RuntimeConfig, launches: DeviceLaunch[]) =>
     startScrcpy(runtimeConfig(runtime), deviceLaunches(launches), sendStatus)
 )
+handle('scrcpy:preview', (_event, launches: DeviceLaunch[]) => {
+  try {
+    return {
+      ok: true,
+      data: deviceLaunches(launches).map(({ serial, launch }) => ({ serial, args: buildScrcpyArgs(launch, serial) }))
+    }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+})
 handle('scrcpy:stop', (_event, serial: string) => stopScrcpy(deviceSerial(serial)))
 handle(
   'device:control',

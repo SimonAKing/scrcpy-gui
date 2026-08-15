@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Preview the exact validated argv generated for each selected device before launch.
+
 ### Security
 
 - Validate every privileged IPC call against the main application frame and trusted renderer URL.

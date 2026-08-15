@@ -77,6 +77,11 @@ export interface DeviceLaunch {
   launch: LaunchConfig
 }
 
+export interface CommandPreview {
+  serial: string
+  args: string[]
+}
+
 export interface WirelessTarget {
   id: string
   name: string
@@ -167,6 +172,7 @@ export interface ScrcpyApi {
   pair(runtime: RuntimeConfig, target: string, code: string): Promise<OperationResult<string>>
   disconnect(runtime: RuntimeConfig, target: string): Promise<OperationResult<string>>
   start(runtime: RuntimeConfig, launches: DeviceLaunch[]): Promise<OperationResult<string[]>>
+  preview(launches: DeviceLaunch[]): Promise<OperationResult<CommandPreview[]>>
   stop(serial: string): Promise<OperationResult>
   control(runtime: RuntimeConfig, serial: string, action: DeviceControlAction): Promise<OperationResult<string>>
   screenshot(runtime: RuntimeConfig, serial: string): Promise<OperationResult<string>>
