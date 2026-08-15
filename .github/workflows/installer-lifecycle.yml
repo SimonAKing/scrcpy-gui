@@ -196,11 +196,16 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install --yes "./downloads/Scrcpy.GUI-${PREVIOUS_VERSION}-linux-amd64.deb"
-          [[ "$(dpkg-query -W -f='${Version}' scrcpy-gui)" == "$PREVIOUS_VERSION" ]]
+          previous_deb="./downloads/Scrcpy.GUI-${PREVIOUS_VERSION}-linux-amd64.deb"
+          current_deb="./downloads/Scrcpy.GUI-${CURRENT_VERSION}-linux-amd64.deb"
+          previous_package_version="$(dpkg-deb --field "$previous_deb" Version)"
+          current_package_version="$(dpkg-deb --field "$current_deb" Version)"
 
-          sudo apt-get install --yes "./downloads/Scrcpy.GUI-${CURRENT_VERSION}-linux-amd64.deb"
-          [[ "$(dpkg-query -W -f='${Version}' scrcpy-gui)" == "$CURRENT_VERSION" ]]
+          sudo apt-get install --yes "$previous_deb"
+          [[ "$(dpkg-query -W -f='${Version}' scrcpy-gui)" == "$previous_package_version" ]]
+
+          sudo apt-get install --yes "$current_deb"
+          [[ "$(dpkg-query -W -f='${Version}' scrcpy-gui)" == "$current_package_version" ]]
           runtime="$(dpkg -L scrcpy-gui | awk '/\/resources\/scrcpy\/scrcpy$/ { print; exit }')"
           adb="$(dpkg -L scrcpy-gui | awk '/\/resources\/scrcpy\/adb$/ { print; exit }')"
           [[ -x "$runtime" && -x "$adb" ]]
