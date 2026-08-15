@@ -3,6 +3,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, toRaw, w
 import type {
   AutomationMacro,
   AutomationStep,
+  AppEvent,
+  AppEventDomain,
+  AppEventLevel,
   CapabilitySnapshot,
   CommandPreview,
   Device,
@@ -15,9 +18,11 @@ import type {
   ScrcpySession,
   ScrcpySessionEvent,
   ScrcpyStatusEvent,
+  StructuredError,
   WirelessTarget
 } from '../shared/types'
 import { defaultPersistedConfig, legacyConfigView } from '../shared/config'
+import { operationErrorMessage } from '../shared/errors'
 import { translate } from './i18n'
 
 type Tab = 'devices' | 'sessions' | 'settings' | 'logs'
@@ -85,12 +90,15 @@ const recordingAutomation = ref(false)
 const recordedSteps = ref<AutomationStep[]>([])
 const automationName = ref('')
 const replayingAutomation = ref('')
-const logs = ref<ScrcpyStatusEvent[]>([])
+const logs = ref<AppEvent[]>([])
+const logLevel = ref<AppEventLevel | 'all'>('all')
+const logDomain = ref<AppEventDomain | 'all'>('all')
 const toasts = ref<Toast[]>([])
 let toastId = 0
 let removeStatusListener: (() => void) | undefined
 let removeSessionListener: (() => void) | undefined
 let removeDeviceListener: (() => void) | undefined
+let removeAppEventListener: (() => void) | undefined
 let lastRecordedActionAt = 0
 let configRevision = 0
 let configReady = false
@@ -121,6 +129,12 @@ const availableCapabilities = computed(() => {
   const features = environment.value?.scrcpy.capabilities?.features
   return features ? capabilityFeatureKeys.filter((feature) => features[feature]) : []
 })
+const visibleLogs = computed(() => logs.value.filter((event) =>
+  (logLevel.value === 'all' || event.level === logLevel.value) &&
+  (logDomain.value === 'all' || event.domain === logDomain.value)
+))
+const eventLevels: AppEventLevel[] = ['debug', 'info', 'warn', 'error']
+const eventDomains: AppEventDomain[] = ['runtime', 'device', 'session', 'config', 'automation', 'artifact', 'update']
 
 const runtimeSnapshot = () => ({ scrcpyPath: config.runtime.scrcpyPath })
 const launchSnapshot = (serial?: string): LaunchConfig => {
@@ -142,7 +156,7 @@ async function persistConfig(): Promise<void> {
   const snapshot = structuredClone(toRaw(config))
   const result = await window.scrcpy.saveConfig(configRevision, snapshot)
   if (result.ok && result.data) configRevision = result.data.revision
-  else toast('error', result.error || t('configSaveFailed'))
+  else toast('error', operationErrorMessage(result, t('configSaveFailed')))
   configSaveInFlight = false
   if (configSavePending) {
     configSavePending = false
@@ -215,7 +229,7 @@ async function refreshDevices(notifyError = false): Promise<void> {
   loadingDevices.value = false
   if (!result.ok) {
     devices.value = []
-    if (notifyError && result.error) toast('error', result.error)
+    if (notifyError) toast('error', operationErrorMessage(result, t('operationFailed')))
     return
   }
   await applyDeviceSnapshot(result.data || [])
@@ -237,7 +251,7 @@ async function applyDeviceSnapshot(nextDevices: Device[]): Promise<void> {
       if (autoLaunchAttempted.has(device.serial) || activeSerials.value.has(device.serial)) continue
       autoLaunchAttempted.add(device.serial)
       const startResult = await window.scrcpy.start(runtimeSnapshot(), [{ serial: device.serial, launch: launchSnapshot(device.serial) }])
-      if (!startResult.ok) toast('error', startResult.error || t('operationFailed'))
+      if (!startResult.ok) toast('error', operationErrorMessage(startResult, t('operationFailed')))
     }
   }
 }
@@ -252,7 +266,7 @@ async function startTrackingDevices(): Promise<void> {
   const result = await window.scrcpy.trackDevices(runtimeSnapshot())
   if (!result.ok) {
     trackerStatus.value = 'error'
-    toast('error', result.error || t('trackerFailed'))
+    toast('error', operationErrorMessage(result, t('trackerFailed')))
     return
   }
   await applyDeviceSnapshot(result.data || [])
@@ -269,7 +283,7 @@ function toggleSelectAll(): void {
 async function launchSelected(): Promise<void> {
   const launches = selectedSerials.value.map((serial) => ({ serial, launch: launchSnapshot(serial) }))
   const result = await window.scrcpy.start(runtimeSnapshot(), launches)
-  if (!result.ok) toast('error', result.error || t('operationFailed'))
+  if (!result.ok) toast('error', operationErrorMessage(result, t('operationFailed')))
 }
 
 async function previewSelected(): Promise<void> {
@@ -287,7 +301,7 @@ async function previewSelected(): Promise<void> {
   })
   const result = await window.scrcpy.preview(launches)
   if (!result.ok) {
-    toast('error', result.error || t('commandPreviewFailed'))
+    toast('error', operationErrorMessage(result, t('commandPreviewFailed')))
     return
   }
   commandPreviews.value = result.data || []
@@ -308,7 +322,7 @@ function previewSource(detail: CommandPreview['details'][number]): string {
 
 async function stop(serial: string): Promise<void> {
   const result = await window.scrcpy.stop(serial)
-  if (!result.ok) toast('error', result.error || t('operationFailed'))
+  if (!result.ok) toast('error', operationErrorMessage(result, t('operationFailed')))
 }
 
 function newId(): string {
@@ -325,7 +339,7 @@ async function connect(address = wirelessTarget.value, notify = true): Promise<b
   const target = address.trim()
   const result = await window.scrcpy.connect(runtimeSnapshot(), target)
   if (!result.ok) {
-    if (notify) toast('error', result.error || t('operationFailed'))
+    if (notify) toast('error', operationErrorMessage(result, t('operationFailed')))
     return false
   }
   wirelessTarget.value = target
@@ -347,7 +361,7 @@ function forgetWirelessTarget(id: string): void {
 async function pair(): Promise<void> {
   const result = await window.scrcpy.pair(runtimeSnapshot(), pairTarget.value, pairingCode.value)
   if (!result.ok) {
-    toast('error', result.error || t('operationFailed'))
+    toast('error', operationErrorMessage(result, t('operationFailed')))
     return
   }
   pairingCode.value = ''
@@ -357,7 +371,7 @@ async function pair(): Promise<void> {
 async function disconnect(serial: string): Promise<void> {
   const result = await window.scrcpy.disconnect(runtimeSnapshot(), serial)
   if (!result.ok) {
-    toast('error', result.error || t('operationFailed'))
+    toast('error', operationErrorMessage(result, t('operationFailed')))
     return
   }
   toast('success', t('disconnected'))
@@ -424,7 +438,7 @@ async function sendControlAction(action: DeviceControlAction): Promise<void> {
   const actionAt = Date.now()
   const result = await window.scrcpy.control(runtimeSnapshot(), controlSerial.value, action)
   if (!result.ok) {
-    toast('error', result.error || t('operationFailed'))
+    toast('error', operationErrorMessage(result, t('operationFailed')))
     return
   }
   if (recordingAutomation.value) {
@@ -438,7 +452,7 @@ async function takeScreenshot(): Promise<void> {
   if (!controlSerial.value) return
   const result = await window.scrcpy.screenshot(runtimeSnapshot(), controlSerial.value)
   if (!result.ok) {
-    if (result.error !== 'Screenshot canceled.') toast('error', result.error || t('operationFailed'))
+    if (result.error?.code !== 'SCREENSHOT_CANCELED') toast('error', operationErrorMessage(result, t('operationFailed')))
     return
   }
   toast('success', `${t('screenshotSaved')} ${result.data}`)
@@ -473,7 +487,7 @@ async function replayAutomation(macro: AutomationMacro): Promise<void> {
   replayingAutomation.value = macro.id
   const result = await window.scrcpy.runAutomation(runtimeSnapshot(), controlSerial.value, structuredClone(toRaw(macro.steps)))
   replayingAutomation.value = ''
-  if (!result.ok) toast('error', result.error || t('operationFailed'))
+  if (!result.ok) toast('error', operationErrorMessage(result, t('operationFailed')))
   else toast('success', t('automationComplete'))
 }
 
@@ -484,7 +498,7 @@ function deleteAutomation(id: string): void {
 
 async function applyBossKey(notify = false): Promise<void> {
   const result = await window.scrcpy.setBossKey(config.bossKeyEnabled, config.bossKeyAccelerator)
-  if (notify && !result.ok) toast('error', result.error || t('operationFailed'))
+  if (notify && !result.ok) toast('error', operationErrorMessage(result, t('operationFailed')))
 }
 
 function resetSettings(): void {
@@ -503,11 +517,30 @@ function openGithub(): void {
 }
 
 function handleStatus(event: ScrcpyStatusEvent): void {
-  logs.value.push(event)
-  if (logs.value.length > 500) logs.value.shift()
   if (event.status === 'running') toast('success', `${event.serial}: ${t('launched')}`)
   if (event.status === 'stopped') toast('info', `${event.serial}: ${t('stopped')}`)
   if (event.status === 'error') toast('error', `${event.serial}: ${event.message}`)
+}
+
+function handleAppEvent(event: AppEvent): void {
+  if (!logs.value.some((item) => item.id === event.id)) logs.value.push(event)
+  if (logs.value.length > 1_000) logs.value.splice(0, logs.value.length - 1_000)
+}
+
+function eventError(event: AppEvent): StructuredError | undefined {
+  const value = event.data?.error
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const candidate = value as Partial<StructuredError>
+  return typeof candidate.code === 'string' && typeof candidate.stage === 'string' &&
+    typeof candidate.message === 'string' && typeof candidate.retryable === 'boolean' &&
+    Array.isArray(candidate.suggestedActions)
+    ? candidate as StructuredError
+    : undefined
+}
+
+async function clearLogs(): Promise<void> {
+  await window.scrcpy.clearEvents()
+  logs.value = []
 }
 
 function sessionIsActive(session: ScrcpySession): boolean {
@@ -527,7 +560,7 @@ function handleSession(event: ScrcpySessionEvent): void {
 
 async function stopSession(id: string): Promise<void> {
   const result = await window.scrcpy.stopSession(id)
-  if (!result.ok) toast('error', result.error || t('operationFailed'))
+  if (!result.ok) toast('error', operationErrorMessage(result, t('operationFailed')))
 }
 
 async function stopAllSessions(): Promise<void> {
@@ -574,6 +607,11 @@ onMounted(async () => {
   removeStatusListener = window.scrcpy.onStatus(handleStatus)
   removeSessionListener = window.scrcpy.onSession(handleSession)
   removeDeviceListener = window.scrcpy.onDevices((event) => void handleDeviceEvent(event))
+  removeAppEventListener = window.scrcpy.onEvent(handleAppEvent)
+  const historicalEvents = await window.scrcpy.listEvents({ limit: 1_000 })
+  const liveEventIds = new Set(logs.value.map((event) => event.id))
+  logs.value.unshift(...historicalEvents.filter((event) => !liveEventIds.has(event.id)))
+  logs.value.sort((left, right) => left.timestamp.localeCompare(right.timestamp))
   document.addEventListener('visibilitychange', handleVisibilityChange)
   handleVisibilityChange()
   const listedSessions = await window.scrcpy.listSessions()
@@ -597,6 +635,7 @@ onBeforeUnmount(() => {
   removeStatusListener?.()
   removeSessionListener?.()
   removeDeviceListener?.()
+  removeAppEventListener?.()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
@@ -856,8 +895,30 @@ onBeforeUnmount(() => {
       </template>
 
       <template v-else-if="activeTab === 'logs'">
-        <section class="logs-header"><div><p class="eyebrow">{{ t('logs') }}</p><h1>scrcpy stdout / stderr</h1></div><button class="ghost" @click="logs = []">{{ t('clearLogs') }}</button></section>
-        <section class="terminal"><p v-if="!logs.length" class="muted">{{ t('noLogs') }}</p><div v-for="(entry, index) in logs" :key="`${entry.timestamp}-${index}`" :class="['log-line', entry.status]"><time>{{ new Date(entry.timestamp).toLocaleTimeString() }}</time><code>[{{ entry.serial }}] {{ entry.message }}</code></div></section>
+        <section class="logs-header">
+          <div><p class="eyebrow">{{ t('logs') }}</p><h1>{{ t('structuredEvents') }}</h1></div>
+          <div class="logs-actions">
+            <select v-model="logLevel" :aria-label="t('filterByLevel')"><option value="all">{{ t('allLevels') }}</option><option v-for="level in eventLevels" :key="level" :value="level">{{ level }}</option></select>
+            <select v-model="logDomain" :aria-label="t('filterByDomain')"><option value="all">{{ t('allDomains') }}</option><option v-for="domain in eventDomains" :key="domain" :value="domain">{{ domain }}</option></select>
+            <button class="ghost" @click="clearLogs">{{ t('clearLogs') }}</button>
+          </div>
+        </section>
+        <section class="terminal">
+          <p v-if="!visibleLogs.length" class="muted">{{ t('noLogs') }}</p>
+          <div v-for="entry in visibleLogs" :key="entry.id" :class="['log-line', entry.level]">
+            <time>{{ new Date(entry.timestamp).toLocaleTimeString() }}</time>
+            <div class="log-entry">
+              <code>[{{ entry.domain }}/{{ entry.action }}]<template v-if="entry.deviceId"> [{{ entry.deviceId }}]</template> {{ entry.message }}</code>
+              <small v-if="entry.stage || entry.requestId" class="log-context"><template v-if="entry.stage">stage={{ entry.stage }}</template><template v-if="entry.requestId"> request={{ entry.requestId }}</template></small>
+              <details v-if="eventError(entry)" class="error-details">
+                <summary>{{ t('errorDetails') }} · {{ eventError(entry)?.code }}</summary>
+                <p v-if="eventError(entry)?.detail">{{ eventError(entry)?.detail }}</p>
+                <p>{{ t('retryable') }}: {{ eventError(entry)?.retryable ? t('yes') : t('no') }}</p>
+                <ul v-if="eventError(entry)?.suggestedActions.length"><li v-for="action in eventError(entry)?.suggestedActions" :key="action">{{ action }}</li></ul>
+              </details>
+            </div>
+          </div>
+        </section>
       </template>
     </main>
 

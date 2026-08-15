@@ -8,6 +8,7 @@
 - Store configuration in a validated, revisioned V3 file owned by the main process, with atomic replacement, backup recovery, and a non-destructive migration from beta local storage.
 - Track ADB device snapshots in the main process with delta events, bounded frame decoding, exponential crash recovery, and a visibility-aware polling fallback.
 - Build managed scrcpy arguments from a tested OptionDescriptor registry and show per-token configuration provenance plus expert-argument warnings in command previews.
+- Correlate privileged operations with structured request IDs, typed failure envelopes, and a bounded main-process event stream that survives Renderer reloads and supports level/domain filtering.
 
 ## 2.0.0-beta.4
 

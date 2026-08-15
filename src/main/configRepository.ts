@@ -19,6 +19,7 @@ import type {
 import { configView, defaultPersistedConfig, legacyConfigView } from '../shared/config'
 import { automationSteps, boundedString, launchConfig, runtimeConfig, strictBoolean } from './ipcValidation'
 import { validateDeviceAddress } from './scrcpy'
+import { failureFromUnknown, operationFailure } from '../shared/errors'
 
 const MAX_CONFIG_BYTES = 2 * 1024 * 1024
 const MAX_COLLECTION_SIZE = 1_000
@@ -321,7 +322,12 @@ export class ConfigRepository {
       try {
         if (!this.current) throw new Error('Configuration has not been loaded.')
         if (expectedRevision !== this.current.revision) {
-          resolveResult({ ok: false, error: `Configuration changed; expected revision ${expectedRevision}, current revision is ${this.current.revision}.` })
+          resolveResult(operationFailure(
+            'CONFIG_REVISION_CONFLICT',
+            'config-save',
+            `Configuration changed; expected revision ${expectedRevision}, current revision is ${this.current.revision}.`,
+            { retryable: true, suggestedActions: ['Reload the latest configuration and retry the change.'] }
+          ))
           return
         }
         const view = validatePersistedConfig(value)
@@ -330,7 +336,13 @@ export class ConfigRepository {
         this.current = next
         resolveResult({ ok: true, data: { config: configView(next), revision: next.revision } })
       } catch (error) {
-        resolveResult({ ok: false, error: error instanceof Error ? error.message : String(error) })
+        resolveResult(failureFromUnknown(
+          error,
+          'CONFIG_SAVE_FAILED',
+          'config-save',
+          'Unable to save the configuration.',
+          { retryable: true, suggestedActions: ['Retry the change after checking available disk space.'] }
+        ))
       }
     })
     await this.saveQueue

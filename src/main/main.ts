@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell, Tray } from 'electron'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { randomUUID } from 'node:crypto'
 import type {
   AutomationStep,
   DeviceControlAction,
@@ -47,6 +48,8 @@ import {
 import { isTrustedRendererUrl, PRODUCTION_CSP } from './security'
 import { buildScrcpyArgDetails, prepareLaunchConfig } from './scrcpy'
 import { ConfigRepository } from './configRepository'
+import { EventStore, validateEventQuery } from './eventStore'
+import { failureFromUnknown, operationFailure } from '../shared/errors'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -57,6 +60,7 @@ let killAdbOnQuit = false
 let quitRuntime: RuntimeConfig = { scrcpyPath: '' }
 let shutdownStarted = false
 let configRepository: ConfigRepository | undefined
+const eventStore = new EventStore()
 const rendererEntryUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
 
 function rendererUrlIsTrusted(url: string): boolean {
@@ -74,10 +78,43 @@ function assertTrustedIpcSender(event: Electron.IpcMainInvokeEvent): void {
   }
 }
 
+function domainForChannel(channel: string): 'runtime' | 'device' | 'session' | 'config' | 'automation' | 'artifact' {
+  if (channel.includes('automation')) return 'automation'
+  if (channel.includes('screenshot') || channel.startsWith('dialog:record')) return 'artifact'
+  if (channel.startsWith('device:')) return 'device'
+  if (channel.startsWith('session:') || channel.startsWith('scrcpy:')) return 'session'
+  if (channel.startsWith('config:')) return 'config'
+  return 'runtime'
+}
+
+function isOperationResult(value: unknown): value is OperationResult<unknown> {
+  return Boolean(value && typeof value === 'object' && 'ok' in value && typeof value.ok === 'boolean')
+}
+
 const handle: typeof ipcMain.handle = (channel, listener) => {
-  ipcMain.handle(channel, (event, ...args) => {
+  ipcMain.handle(channel, async (event, ...args) => {
     assertTrustedIpcSender(event)
-    return listener(event, ...args)
+    const requestId = randomUUID()
+    const audit = !channel.startsWith('events:')
+    try {
+      const result = await listener(event, ...args)
+      const operation = isOperationResult(result) ? result : undefined
+      const failed = operation?.ok === false
+      if (audit) eventStore.publish({
+        level: failed ? 'warn' : 'debug', domain: domainForChannel(channel), action: channel,
+        requestId,
+        stage: operation?.error?.stage || 'ipc',
+        message: operation?.error?.message || `${channel} completed.`,
+        data: operation?.error ? { error: operation.error } : undefined
+      })
+      return operation ? { ...operation, requestId } : result
+    } catch (error) {
+      if (audit) eventStore.publish({
+        level: 'error', domain: domainForChannel(channel), action: channel,
+        requestId, stage: 'ipc', message: error instanceof Error ? error.message : String(error)
+      })
+      throw error
+    }
   })
 }
 
@@ -113,12 +150,27 @@ function sendSessionEvent(event: ScrcpySessionEvent): void {
     message: event.message,
     timestamp: event.timestamp
   })
+  eventStore.publish({
+    level: event.type === 'output' ? 'debug' : event.session.state === 'failed' ? 'error' : 'info',
+    domain: 'session', action: event.type === 'output' ? 'output' : event.session.state,
+    deviceId: event.session.serialAtLaunch, sessionId: event.session.id, stage: event.session.state,
+    message: event.message, data: { scene: event.session.scene, pid: event.session.pid, exitCode: event.session.exitCode }
+  })
 }
 
 subscribeScrcpySessionEvents(sendSessionEvent)
 
 subscribeDeviceTrackerEvents((event) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('device:event', event)
+  eventStore.publish({
+    level: event.status === 'error' ? 'error' : event.status === 'restarting' ? 'warn' : event.status === 'tracking' ? 'debug' : 'info',
+    domain: 'device', action: `tracker-${event.status}`, stage: event.source, message: event.message,
+    data: { revision: event.revision, added: event.added.length, changed: event.changed.length, removed: event.removed.length, retryInMs: event.retryInMs }
+  })
+})
+
+eventStore.subscribe((event) => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:event', event)
 })
 
 function createWindow(): void {
@@ -191,21 +243,23 @@ function setBossKey(enabled: boolean, accelerator: string): OperationResult<stri
   if (!enabled) return { ok: true, data: 'Boss key disabled.' }
 
   const shortcut = accelerator.trim()
-  if (!shortcut) return { ok: false, error: 'Enter a boss key shortcut.' }
+  if (!shortcut) return operationFailure('BOSS_KEY_REQUIRED', 'validation', 'Enter a boss key shortcut.')
   try {
     const registered = globalShortcut.register(shortcut, () => {
       stopAllScrcpy('boss-key')
       mainWindow?.hide()
     })
-    if (!registered) return { ok: false, error: `The shortcut ${shortcut} is already in use.` }
+    if (!registered) return operationFailure('BOSS_KEY_UNAVAILABLE', 'boss-key', `The shortcut ${shortcut} is already in use.`)
     registeredBossKey = shortcut
     return { ok: true, data: shortcut }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    return failureFromUnknown(error, 'BOSS_KEY_REGISTRATION_FAILED', 'boss-key', 'Unable to register the boss key.')
   }
 }
 
 handle('app:version', () => app.getVersion())
+handle('events:list', (_event, query: unknown) => eventStore.list(validateEventQuery(query)))
+handle('events:clear', () => eventStore.clear())
 handle('app:minimize-to-tray', (_event, enabled: boolean) => {
   minimizeToTray = strictBoolean(enabled, 'minimizeToTray')
 })
@@ -288,7 +342,7 @@ handle('scrcpy:preview', (_event, launches: unknown) => {
       })
     }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    return failureFromUnknown(error, 'COMMAND_PREVIEW_FAILED', 'command-preview', 'Unable to build the command preview.')
   }
 })
 handle('session:list', () => listScrcpySessions())
@@ -309,7 +363,9 @@ handle('device:screenshot', async (_event, runtime: RuntimeConfig, serial: strin
     defaultPath: join(app.getPath('pictures'), `scrcpy-${safeSerial}-${timestamp}.png`),
     filters: [{ name: 'PNG image', extensions: ['png'] }]
   })
-  if (result.canceled || !result.filePath) return { ok: false, error: 'Screenshot canceled.' }
+  if (result.canceled || !result.filePath) {
+    return operationFailure('SCREENSHOT_CANCELED', 'screenshot-destination', 'Screenshot canceled.')
+  }
   return captureDeviceScreenshot(validatedRuntime, validatedSerial, result.filePath)
 })
 handle(

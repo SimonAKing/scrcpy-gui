@@ -23,6 +23,29 @@ export interface DeviceTrackerEvent {
   retryInMs?: number
 }
 
+export type AppEventLevel = 'debug' | 'info' | 'warn' | 'error'
+export type AppEventDomain = 'runtime' | 'device' | 'session' | 'config' | 'automation' | 'artifact' | 'update'
+
+export interface AppEvent {
+  id: string
+  timestamp: string
+  level: AppEventLevel
+  domain: AppEventDomain
+  action: string
+  requestId?: string
+  deviceId?: string
+  sessionId?: string
+  stage?: string
+  message: string
+  data?: Record<string, unknown>
+}
+
+export interface AppEventQuery {
+  limit: number
+  levels?: AppEventLevel[]
+  domains?: AppEventDomain[]
+}
+
 export interface RuntimeConfig {
   scrcpyPath: string
 }
@@ -299,7 +322,18 @@ export interface CapabilitySnapshot {
 export interface OperationResult<T = undefined> {
   ok: boolean
   data?: T
-  error?: string
+  error?: StructuredError
+  requestId?: string
+}
+
+export interface StructuredError {
+  code: string
+  stage: string
+  message: string
+  detail?: string
+  exitCode?: number
+  retryable: boolean
+  suggestedActions: string[]
 }
 
 export interface ScrcpyStatusEvent {
@@ -314,6 +348,8 @@ export interface ScrcpyApi {
   chooseScrcpy(): Promise<string>
   chooseRecordPath(): Promise<string>
   chooseRecordDirectory(): Promise<string>
+  listEvents(query: AppEventQuery): Promise<AppEvent[]>
+  clearEvents(): Promise<void>
   loadConfig(legacyJson: string, locale: Locale): Promise<ConfigLoadResult>
   saveConfig(revision: number, config: PersistedConfig): Promise<OperationResult<ConfigSaveResult>>
   getEnvironment(runtime: RuntimeConfig): Promise<EnvironmentStatus>
@@ -338,4 +374,5 @@ export interface ScrcpyApi {
   onStatus(callback: (event: ScrcpyStatusEvent) => void): () => void
   onSession(callback: (event: ScrcpySessionEvent) => void): () => void
   onDevices(callback: (event: DeviceTrackerEvent) => void): () => void
+  onEvent(callback: (event: AppEvent) => void): () => void
 }

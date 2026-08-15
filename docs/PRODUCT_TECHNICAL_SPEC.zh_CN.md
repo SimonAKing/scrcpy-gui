@@ -10,6 +10,8 @@
 >
 > 维护者：Simon Ma 与 Scrcpy GUI contributors
 
+> 实施进度（2026-08-15）：M1 的 OptionDescriptor、CapabilityRegistry、命令预览、SessionManager、DeviceTracker、结构化事件/错误、Sessions 页面和 Config V3 已落地；M0 的三平台真实设备矩阵、Chocolatey 社区审核和 Stable 验收仍待外部条件完成。M2–M4 尚未开始。
+
 ## 0. 文档目的
 
 本文不是宣传页，也不是把所有可能的功能罗列成愿望清单。它用于回答以下工程问题：

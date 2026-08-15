@@ -20,6 +20,7 @@ import { buildScrcpyArgs, isSupportedScrcpyVersion, parseAdbDevices, prepareLaun
 import { ScrcpySessionManager } from './sessionManager'
 import { buildCapabilitySnapshot } from './capabilities'
 import { DeviceTracker } from './deviceTracker'
+import { failureFromUnknown, operationFailure, operationErrorMessage } from '../shared/errors'
 
 interface CommandOutput {
   stdout: string
@@ -31,7 +32,7 @@ let trackerRuntime: RuntimeConfig = { scrcpyPath: '' }
 const deviceTracker = new DeviceTracker({
   pollDevices: async () => {
     const result = await listDevices(trackerRuntime)
-    if (!result.ok) throw new Error(result.error || 'Unable to poll ADB devices.')
+    if (!result.ok) throw new Error(operationErrorMessage(result, 'Unable to poll ADB devices.'))
     return result.data || []
   }
 })
@@ -241,18 +242,26 @@ export async function listDevices(runtime: RuntimeConfig): Promise<OperationResu
     const result = await adbCommand(runtime, ['devices', '-l'])
     return { ok: true, data: parseAdbDevices(result.stdout) }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    return failureFromUnknown(error, 'ADB_LIST_FAILED', 'device-list', 'Unable to list Android devices.', {
+      retryable: true,
+      suggestedActions: ['Recheck the runtime setup.', 'Reconnect the device and try again.']
+    })
   }
 }
 
 export async function startDeviceTracker(runtime: RuntimeConfig): Promise<OperationResult<Device[]>> {
   trackerRuntime = runtime
   const adbPath = await resolveBinary(runtime, 'adb')
-  if (!adbPath) return { ok: false, error: 'adb executable not found.' }
+  if (!adbPath) return operationFailure('ADB_NOT_FOUND', 'device-tracker', 'adb executable not found.', {
+    suggestedActions: ['Recheck the runtime setup.']
+  })
   try {
     return { ok: true, data: deviceTracker.start(adbPath) }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    return failureFromUnknown(error, 'DEVICE_TRACKER_START_FAILED', 'device-tracker', 'Unable to start device tracking.', {
+      retryable: true,
+      suggestedActions: ['Recheck the runtime setup.', 'Try refreshing devices manually.']
+    })
   }
 }
 
@@ -278,14 +287,23 @@ export async function stopAdbServer(runtime: RuntimeConfig): Promise<void> {
 
 export async function connectDevice(runtime: RuntimeConfig, target: string): Promise<OperationResult<string>> {
   const address = target.trim()
-  if (!validateDeviceAddress(address)) return { ok: false, error: 'Enter a valid host and optional port (1-65535).' }
+  if (!validateDeviceAddress(address)) {
+    return operationFailure('INVALID_DEVICE_ADDRESS', 'validation', 'Enter a valid host and optional port (1-65535).')
+  }
   try {
     const result = await adbCommand(runtime, ['connect', address])
     const output = `${result.stdout}\n${result.stderr}`.trim()
     const ok = /connected to|already connected to/i.test(output)
-    return ok ? { ok: true, data: output } : { ok: false, error: output || 'adb connect failed.' }
+    return ok ? { ok: true, data: output } : operationFailure('ADB_CONNECT_FAILED', 'device-connect', 'adb connect failed.', {
+      detail: output || undefined,
+      retryable: true,
+      suggestedActions: ['Confirm wireless debugging is enabled.', 'Verify that the host and port are reachable.']
+    })
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    return failureFromUnknown(error, 'ADB_CONNECT_FAILED', 'device-connect', 'Unable to connect to the device.', {
+      retryable: true,
+      suggestedActions: ['Confirm wireless debugging is enabled.', 'Verify that the host and port are reachable.']
+    })
   }
 }
 
@@ -295,27 +313,43 @@ export async function pairDevice(
   code: string
 ): Promise<OperationResult<string>> {
   const address = target.trim()
-  if (!validateDeviceAddress(address, true)) return { ok: false, error: 'Pairing requires a valid host:port.' }
-  if (!/^\d{6}$/.test(code.trim())) return { ok: false, error: 'Pairing code must contain exactly six digits.' }
+  if (!validateDeviceAddress(address, true)) {
+    return operationFailure('INVALID_PAIR_ADDRESS', 'validation', 'Pairing requires a valid host:port.')
+  }
+  if (!/^\d{6}$/.test(code.trim())) {
+    return operationFailure('INVALID_PAIRING_CODE', 'validation', 'Pairing code must contain exactly six digits.')
+  }
   try {
     const result = await adbCommand(runtime, ['pair', address, code.trim()])
     const output = `${result.stdout}\n${result.stderr}`.trim()
     const ok = /successfully paired/i.test(output)
-    return ok ? { ok: true, data: output } : { ok: false, error: output || 'adb pair failed.' }
+    return ok ? { ok: true, data: output } : operationFailure('ADB_PAIR_FAILED', 'device-pair', 'adb pair failed.', {
+      detail: output || undefined,
+      retryable: true,
+      suggestedActions: ['Request a new pairing code.', 'Verify that the pairing host and port are correct.']
+    })
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    return failureFromUnknown(error, 'ADB_PAIR_FAILED', 'device-pair', 'Unable to pair the device.', {
+      retryable: true,
+      suggestedActions: ['Request a new pairing code.', 'Verify that the pairing host and port are correct.']
+    })
   }
 }
 
 export async function disconnectDevice(runtime: RuntimeConfig, target: string): Promise<OperationResult<string>> {
   const address = target.trim()
-  if (!validateDeviceAddress(address)) return { ok: false, error: 'Enter a valid wireless device address.' }
+  if (!validateDeviceAddress(address)) {
+    return operationFailure('INVALID_DEVICE_ADDRESS', 'validation', 'Enter a valid wireless device address.')
+  }
   try {
     const result = await adbCommand(runtime, ['disconnect', address])
     const output = `${result.stdout}\n${result.stderr}`.trim()
     return { ok: true, data: output }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    return failureFromUnknown(error, 'ADB_DISCONNECT_FAILED', 'device-disconnect', 'Unable to disconnect the device.', {
+      retryable: true,
+      suggestedActions: ['Refresh the device list and try again.']
+    })
   }
 }
 
@@ -339,7 +373,7 @@ export async function controlDevice(
   action: DeviceControlAction
 ): Promise<OperationResult<string>> {
   const target = serial.trim()
-  if (!target) return { ok: false, error: 'Choose a device first.' }
+  if (!target) return operationFailure('DEVICE_REQUIRED', 'validation', 'Choose a device first.')
   try {
     if (action === 'rotate') return { ok: true, data: await rotateDevice(runtime, target) }
     if (action === 'auto-rotate') {
@@ -355,7 +389,7 @@ export async function controlDevice(
       return { ok: true, data: `${action} sent to ${target}.` }
     }
     const keyCode = CONTROL_KEYCODES[action]
-    if (!keyCode) return { ok: false, error: 'Unsupported device control action.' }
+    if (!keyCode) return operationFailure('UNSUPPORTED_CONTROL_ACTION', 'validation', 'Unsupported device control action.')
     if (action === 'screen-on' || action === 'screen-off') {
       try {
         await adbCommand(runtime, ['-s', target, 'shell', 'cmd', 'display', action === 'screen-on' ? 'power-on' : 'power-off', '0'])
@@ -367,7 +401,10 @@ export async function controlDevice(
     await adbCommand(runtime, ['-s', target, 'shell', 'input', 'keyevent', keyCode])
     return { ok: true, data: `${action} sent to ${target}.` }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    return failureFromUnknown(error, 'DEVICE_CONTROL_FAILED', 'device-control', 'Unable to control the device.', {
+      retryable: true,
+      suggestedActions: ['Confirm that the device is still connected and authorized.']
+    })
   }
 }
 
@@ -378,7 +415,9 @@ export async function captureDeviceScreenshot(
 ): Promise<OperationResult<string>> {
   try {
     const adbPath = await resolveBinary(runtime, 'adb')
-    if (!adbPath) return { ok: false, error: 'adb executable not found.' }
+    if (!adbPath) return operationFailure('ADB_NOT_FOUND', 'screenshot', 'adb executable not found.', {
+      suggestedActions: ['Recheck the runtime setup.']
+    })
     const png = await executeBinary(adbPath, ['-s', serial.trim(), 'exec-out', 'screencap', '-p'])
     const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     if (png.length < signature.length || !png.subarray(0, signature.length).equals(signature)) {
@@ -387,7 +426,10 @@ export async function captureDeviceScreenshot(
     await writeFile(outputPath, png)
     return { ok: true, data: outputPath }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    return failureFromUnknown(error, 'SCREENSHOT_FAILED', 'screenshot', 'Unable to capture the screenshot.', {
+      retryable: true,
+      suggestedActions: ['Confirm that the device is connected and unlocked.']
+    })
   }
 }
 
@@ -396,20 +438,26 @@ export async function runDeviceAutomation(
   serial: string,
   steps: AutomationStep[]
 ): Promise<OperationResult<string>> {
-  if (!serial.trim()) return { ok: false, error: 'Choose a device first.' }
-  if (!Array.isArray(steps) || steps.length === 0) return { ok: false, error: 'The automation has no actions.' }
-  if (steps.length > 200) return { ok: false, error: 'An automation may contain at most 200 actions.' }
+  if (!serial.trim()) return operationFailure('DEVICE_REQUIRED', 'validation', 'Choose a device first.')
+  if (!Array.isArray(steps) || steps.length === 0) {
+    return operationFailure('AUTOMATION_EMPTY', 'validation', 'The automation has no actions.')
+  }
+  if (steps.length > 200) {
+    return operationFailure('AUTOMATION_TOO_LARGE', 'validation', 'An automation may contain at most 200 actions.')
+  }
   let totalDelay = 0
   for (const step of steps) {
     if (!CONTROL_KEYCODES[step.action] && !SPECIAL_CONTROL_ACTIONS.has(step.action)) {
-      return { ok: false, error: 'The automation contains an unsupported action.' }
+      return operationFailure('AUTOMATION_ACTION_UNSUPPORTED', 'validation', 'The automation contains an unsupported action.')
     }
     if (!Number.isFinite(step.delayMs) || step.delayMs < 0 || step.delayMs > 60_000) {
-      return { ok: false, error: 'Each automation delay must be between 0 and 60 seconds.' }
+      return operationFailure('AUTOMATION_DELAY_INVALID', 'validation', 'Each automation delay must be between 0 and 60 seconds.')
     }
     totalDelay += step.delayMs
   }
-  if (totalDelay > 30 * 60_000) return { ok: false, error: 'Automation duration may not exceed 30 minutes.' }
+  if (totalDelay > 30 * 60_000) {
+    return operationFailure('AUTOMATION_DURATION_EXCEEDED', 'validation', 'Automation duration may not exceed 30 minutes.')
+  }
 
   for (const step of steps) {
     if (step.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, step.delayMs))
@@ -432,20 +480,29 @@ export async function startScrcpy(
   launches: DeviceLaunch[]
 ): Promise<OperationResult<string[]>> {
   const scrcpyPath = await resolveBinary(runtime, 'scrcpy')
-  if (!scrcpyPath) return { ok: false, error: 'scrcpy executable not found.' }
+  if (!scrcpyPath) return operationFailure('SCRCPY_NOT_FOUND', 'session-preflight', 'scrcpy executable not found.', {
+    suggestedActions: ['Recheck the runtime setup.', 'Choose a scrcpy executable manually.']
+  })
   try {
     const result = await execute(scrcpyPath, ['--version'])
     const version = firstVersionLine(`${result.stdout}\n${result.stderr}`, 'scrcpy')
-    if (!isSupportedScrcpyVersion(version)) return { ok: false, error: `scrcpy 4.x or newer is required; found ${version}.` }
+    if (!isSupportedScrcpyVersion(version)) {
+      return operationFailure('SCRCPY_UNSUPPORTED', 'session-preflight', `scrcpy 4.x or newer is required; found ${version}.`, {
+        suggestedActions: ['Install or choose scrcpy 4.x or newer.']
+      })
+    }
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    return failureFromUnknown(error, 'SCRCPY_PREFLIGHT_FAILED', 'session-preflight', 'Unable to verify the scrcpy runtime.', {
+      retryable: true,
+      suggestedActions: ['Recheck the runtime setup.']
+    })
   }
   const uniqueLaunches = [...new Map(
     launches
       .filter((request) => request && request.serial.trim())
       .map((request) => [request.serial.trim(), { serial: request.serial.trim(), launch: request.launch }])
   ).values()]
-  if (uniqueLaunches.length === 0) return { ok: false, error: 'Select at least one device.' }
+  if (uniqueLaunches.length === 0) return operationFailure('DEVICE_REQUIRED', 'validation', 'Select at least one device.')
 
   const started: string[] = []
   for (const { serial, launch } of uniqueLaunches) {
@@ -453,7 +510,9 @@ export async function startScrcpy(
     try {
       args = buildScrcpyArgs(prepareLaunchConfig(launch, serial), serial)
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+      return failureFromUnknown(error, 'SESSION_OPTIONS_INVALID', 'session-preflight', 'Unable to prepare the scrcpy command.', {
+        suggestedActions: ['Review the command preview and expert arguments.']
+      })
     }
 
     const session = sessionManager.launch({ executable: scrcpyPath, serial, scene: 'screen', args })
@@ -462,7 +521,10 @@ export async function startScrcpy(
 
   return started.length > 0
     ? { ok: true, data: started }
-    : { ok: false, error: 'No new scrcpy process was started.' }
+    : operationFailure('SESSION_START_FAILED', 'session-launch', 'No new scrcpy process was started.', {
+      retryable: true,
+      suggestedActions: ['Review the Sessions page and structured events for details.']
+    })
 }
 
 export function stopScrcpy(serial: string): OperationResult {

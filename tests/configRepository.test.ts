@@ -70,7 +70,8 @@ describe('ConfigRepository', () => {
 
     const stale = await store.save(loaded.revision, defaultPersistedConfig('en'))
     expect(stale.ok).toBe(false)
-    expect(stale.error).toContain('current revision is 2')
+    expect(stale.error).toMatchObject({ code: 'CONFIG_REVISION_CONFLICT', stage: 'config-save', retryable: true })
+    expect(stale.error?.message).toContain('current revision is 2')
     expect(JSON.parse(await readFile(join(directory, 'config.json'), 'utf8'))).toMatchObject({ revision: 2 })
   })
 
@@ -98,7 +99,8 @@ describe('ConfigRepository', () => {
 
     const result = await store.save(loaded.revision, invalid)
     expect(result.ok).toBe(false)
-    expect(result.error).toContain('videoBitRate')
+    expect(result.error).toMatchObject({ code: 'CONFIG_SAVE_FAILED', stage: 'config-save' })
+    expect(result.error?.detail).toContain('videoBitRate')
     expect(await readFile(join(directory, 'config.json'), 'utf8')).toBe(before)
   })
 
