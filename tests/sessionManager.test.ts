@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ScrcpySession, ScrcpySessionEvent, SessionState } from '../src/shared/types'
+import type { SceneKind, ScrcpySession, ScrcpySessionEvent, SessionState } from '../src/shared/types'
 import { canTransitionSession, ScrcpySessionManager } from '../src/main/sessionManager'
 
 const managers: ScrcpySessionManager[] = []
@@ -10,11 +10,11 @@ function manager(): ScrcpySessionManager {
   return instance
 }
 
-function launchFake(instance: ScrcpySessionManager, serial: string, source: string): ScrcpySession {
+function launchFake(instance: ScrcpySessionManager, serial: string, source: string, scene: SceneKind = 'screen'): ScrcpySession {
   return instance.launch({
     executable: process.execPath,
     serial,
-    scene: 'screen',
+    scene,
     args: ['-e', source]
   })
 }
@@ -139,10 +139,25 @@ describe('ScrcpySessionManager integration', () => {
     const duplicate = launchFake(instance, 'FAKE-004', 'setInterval(() => {}, 1000)')
 
     expect(duplicate.state).toBe('failed')
-    expect(duplicate.error).toContain('already exists')
+    expect(duplicate.error).toContain('conflicts with screen')
     await waitForState(instance, first.id, 'running')
     expect(instance.stop(first.id)).toEqual({ ok: true })
     await waitForState(instance, first.id, 'stopped')
+  })
+
+  it('allows independent screen and camera sessions but applies the OTG conflict matrix', async () => {
+    const instance = manager()
+    const screen = launchFake(instance, 'FAKE-SCENES', 'setInterval(() => {}, 1000)')
+    const camera = launchFake(instance, 'FAKE-SCENES', 'setInterval(() => {}, 1000)', 'camera')
+    const otg = launchFake(instance, 'FAKE-SCENES', 'setInterval(() => {}, 1000)', 'otg')
+
+    expect(screen.state).toBe('launching')
+    expect(camera.state).toBe('launching')
+    expect(otg.state).toBe('failed')
+    expect(otg.error).toContain('conflicts')
+    instance.stopAll()
+    await waitForState(instance, screen.id, 'stopped')
+    await waitForState(instance, camera.id, 'stopped')
   })
 
   it('captures spawn errors from a missing executable', async () => {

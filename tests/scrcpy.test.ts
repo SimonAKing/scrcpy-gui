@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LaunchConfig } from '../src/shared/types'
+import { defaultLaunchConfig } from '../src/shared/config'
 import {
   buildScrcpyArgs,
   isSupportedScrcpyVersion,
@@ -12,41 +13,7 @@ import { isTrustedRendererUrl, PRODUCTION_CSP } from '../src/main/security'
 import { buildCapabilitySnapshot, parseScrcpyHelpFlags } from '../src/main/capabilities'
 
 function config(overrides: Partial<LaunchConfig> = {}): LaunchConfig {
-  return {
-    windowTitle: '',
-    videoBitRate: 8,
-    videoBuffer: 0,
-    audioBuffer: 0,
-    maxSize: 0,
-    maxFps: 0,
-    displayId: 0,
-    orientation: '0',
-    videoCodec: 'default',
-    shortcutModifier: 'default',
-    keyboardMode: 'default',
-    mouseMode: 'default',
-    gamepadMode: 'default',
-    alwaysOnTop: false,
-    control: true,
-    audio: true,
-    turnScreenOff: false,
-    stayAwake: false,
-    showTouches: false,
-    fullscreen: false,
-    borderless: false,
-    windowAspectRatioLock: true,
-    pushTarget: '',
-    tunnelPort: '',
-    recordEnabled: false,
-    recordPath: '',
-    autoRecordName: false,
-    recordDirectory: '',
-    noPlayback: false,
-    crop: { x: 0, y: 0, width: 0, height: 0 },
-    window: { x: 0, y: 0, width: 0, height: 0 },
-    extraArgs: '',
-    ...overrides
-  }
+  return { ...defaultLaunchConfig(), ...overrides }
 }
 
 describe('parseAdbDevices', () => {
@@ -222,7 +189,7 @@ describe('validatePortRange', () => {
 
 describe('splitExtraArgs', () => {
   it('passes one safe argument per line', () => {
-    expect(splitExtraArgs(' --power-off-on-close \n\n--time-limit=30')).toEqual(['--power-off-on-close', '--time-limit=30'])
+    expect(splitExtraArgs(' --power-off-on-close \n\n--render-expired-frames')).toEqual(['--power-off-on-close', '--render-expired-frames'])
   })
 
   it('prevents callers from overriding the selected device', () => {

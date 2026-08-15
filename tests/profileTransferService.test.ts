@@ -62,6 +62,23 @@ describe('ProfileTransferService', () => {
     expect(service.preview(JSON.stringify(raw), [], 'en', '5.1').compatible).toBe(true)
   })
 
+  it('round-trips a supported non-screen scene without duplicating scene inside options', () => {
+    const service = new ProfileTransferService()
+    const camera = profile({
+      name: 'Camera',
+      launch: { ...defaultLaunchConfig(), scene: 'camera', cameraFacing: 'back', cameraFps: 60 }
+    })
+    const contents = service.serialize(camera, '2.0.0-beta.6')
+    const exported = JSON.parse(contents)
+    expect(exported.profile.scene).toBe('camera')
+    expect(exported.profile.options).not.toHaveProperty('scene')
+
+    const preview = service.preview(contents, [], 'en')
+    expect(preview.scene).toBe('camera')
+    const committed = service.commit(preview.token, 'duplicate', false, [])
+    expect(committed.profile?.launch).toMatchObject({ scene: 'camera', cameraFacing: 'back', cameraFps: 60 })
+  })
+
   it('imports a unique copy while disabling machine-local recording paths by default', () => {
     const service = new ProfileTransferService()
     const existing = [profile({ id: 'existing', name: 'Gaming' }), profile({ id: 'copy', name: 'Gaming (2)' })]
@@ -102,8 +119,8 @@ describe('ProfileTransferService', () => {
   it('rejects unsupported scenes, managed expert flags and oversized extension payloads', () => {
     const service = new ProfileTransferService()
     const wrongScene = JSON.parse(document())
-    wrongScene.profile.scene = 'otg'
-    expect(() => service.preview(JSON.stringify(wrongScene), [], 'en')).toThrow('screen scene')
+    wrongScene.profile.scene = 'future-scene'
+    expect(() => service.preview(JSON.stringify(wrongScene), [], 'en')).toThrow('not supported')
 
     const managed = JSON.parse(document())
     managed.profile.expertArgs = ['--serial=OTHER']

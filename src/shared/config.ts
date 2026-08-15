@@ -3,17 +3,26 @@ import { optionDefault } from './options'
 
 export function defaultLaunchConfig(): LaunchConfig {
   return {
-    windowTitle: optionDefault('windowTitle'), videoBitRate: optionDefault('videoBitRate'),
+    scene: 'screen', windowTitle: optionDefault('windowTitle'), videoBitRate: optionDefault('videoBitRate'),
     videoBuffer: optionDefault('videoBuffer'), audioBuffer: optionDefault('audioBuffer'), maxSize: optionDefault('maxSize'),
     maxFps: optionDefault('maxFps'), displayId: optionDefault('displayId'), orientation: optionDefault('orientation'),
-    videoCodec: optionDefault('videoCodec'), shortcutModifier: optionDefault('shortcutModifier'),
+    videoCodec: optionDefault('videoCodec'), videoEncoder: '', audioCodec: 'default', audioEncoder: '', audioSource: 'default',
+    shortcutModifier: optionDefault('shortcutModifier'),
     keyboardMode: optionDefault('keyboardMode'), mouseMode: optionDefault('mouseMode'), gamepadMode: optionDefault('gamepadMode'),
     alwaysOnTop: optionDefault('alwaysOnTop'), control: optionDefault('control'), audio: optionDefault('audio'),
     turnScreenOff: optionDefault('turnScreenOff'), stayAwake: optionDefault('stayAwake'), showTouches: optionDefault('showTouches'),
     fullscreen: optionDefault('fullscreen'), borderless: optionDefault('borderless'),
     windowAspectRatioLock: optionDefault('windowAspectRatioLock'), pushTarget: optionDefault('pushTarget'),
     tunnelPort: optionDefault('tunnelPort'), recordEnabled: optionDefault('recording'), recordPath: '',
-    autoRecordName: false, recordDirectory: '', noPlayback: false, crop: optionDefault('crop'),
+    autoRecordName: false, recordDirectory: '', noPlayback: false, recordFormat: 'default', recordOrientation: 'default',
+    timeLimit: 0, recordVideo: true, recordAudio: true,
+    cameraId: '', cameraFacing: 'default', cameraSize: { width: 0, height: 0 }, cameraFps: 0,
+    cameraHighSpeed: false, cameraTorch: false, cameraZoom: 1,
+    virtualDisplay: {
+      width: 0, height: 0, dpi: 0, systemDecorations: true, destroyContent: true,
+      flexDisplay: false, startApp: '', keepActive: false, imePolicy: 'default'
+    },
+    v4l2Sink: '', v4l2Buffer: 0, v4l2Playback: true, crop: optionDefault('crop'),
     window: { ...optionDefault<object>('windowPosition'), ...optionDefault<object>('windowSize') } as LaunchConfig['window'], extraArgs: ''
   }
 }
@@ -24,7 +33,9 @@ export function normalizedLaunch(stored?: Partial<LaunchConfig>): LaunchConfig {
     ...defaults,
     ...stored,
     crop: { ...defaults.crop, ...stored?.crop },
-    window: { ...defaults.window, ...stored?.window }
+    window: { ...defaults.window, ...stored?.window },
+    cameraSize: { ...defaults.cameraSize, ...stored?.cameraSize },
+    virtualDisplay: { ...defaults.virtualDisplay, ...stored?.virtualDisplay }
   }
 }
 

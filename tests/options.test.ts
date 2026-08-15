@@ -3,6 +3,7 @@ import type { LaunchConfig } from '../src/shared/types'
 import { defaultLaunchConfig } from '../src/shared/config'
 import { analyzeExpertArgs, OPTION_DESCRIPTORS, serializeLaunchOptions } from '../src/shared/options'
 import { buildScrcpyArgDetails, prepareLaunchConfig } from '../src/main/scrcpy'
+import { SCENE_KINDS } from '../src/shared/scenes'
 
 type OptionCase = [string, (config: LaunchConfig) => void, string[]]
 
@@ -44,7 +45,8 @@ describe('OptionDescriptor registry', () => {
     for (const descriptor of OPTION_DESCRIPTORS) {
       expect(descriptor.helpKey).toBeTruthy()
       expect(descriptor.minScrcpyVersion).toBe('4.0')
-      expect(descriptor.scenes).toContain('screen')
+      expect(descriptor.scenes.length).toBeGreaterThan(0)
+      expect(descriptor.scenes.every((scene) => SCENE_KINDS.includes(scene))).toBe(true)
     }
   })
 
@@ -74,12 +76,12 @@ describe('OptionDescriptor registry', () => {
 
 describe('expert argument policy', () => {
   it('preserves unknown flags in order and reports warnings', () => {
-    const result = analyzeExpertArgs('--power-off-on-close\n--time-limit=30')
-    expect(result.args).toEqual(['--power-off-on-close', '--time-limit=30'])
+    const result = analyzeExpertArgs('--power-off-on-close\n--render-expired-frames')
+    expect(result.args).toEqual(['--power-off-on-close', '--render-expired-frames'])
     expect(result.warnings).toHaveLength(2)
   })
 
-  it.each(['--serial=other', '-s', '--video-buffer=50', '--record=a.mp4', '--window-height=900'])(
+  it.each(['--serial=other', '-s', '--video-buffer=50', '--record=a.mp4', '--window-height=900', '--time-limit=30', '--camera-id=0'])(
     'rejects managed duplicate %s',
     (arg) => expect(() => analyzeExpertArgs(arg)).toThrow('managed by Scrcpy GUI')
   )

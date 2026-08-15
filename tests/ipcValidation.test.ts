@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LaunchConfig } from '../src/shared/types'
+import { defaultLaunchConfig } from '../src/shared/config'
 import {
   automationSteps,
   boundedString,
@@ -15,16 +16,7 @@ import {
 } from '../src/main/ipcValidation'
 
 function validLaunch(overrides: Partial<LaunchConfig> = {}): LaunchConfig {
-  return {
-    windowTitle: '', videoBitRate: 8, videoBuffer: 0, audioBuffer: 0, maxSize: 0, maxFps: 0, displayId: 0,
-    orientation: '0', videoCodec: 'default', shortcutModifier: 'default', keyboardMode: 'default',
-    mouseMode: 'default', gamepadMode: 'default', alwaysOnTop: false, control: true, audio: true,
-    turnScreenOff: false, stayAwake: false, showTouches: false, fullscreen: false, borderless: false,
-    windowAspectRatioLock: true, pushTarget: '', tunnelPort: '', recordEnabled: false, recordPath: '',
-    autoRecordName: false, recordDirectory: '', noPlayback: false,
-    crop: { x: 0, y: 0, width: 0, height: 0 }, window: { x: 0, y: 0, width: 0, height: 0 }, extraArgs: '',
-    ...overrides
-  }
+  return { ...defaultLaunchConfig(), ...overrides }
 }
 
 describe('IPC scalar validation', () => {
