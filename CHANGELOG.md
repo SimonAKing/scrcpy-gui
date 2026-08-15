@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.0-beta.3
+
+### Changed
+
+- Reworked Runtime setup into a compact two-level layout with actions above two equal status blocks.
+- Shortened detected runtime versions to readable values while preserving the complete version output as a tooltip.
+
+### Fixed
+
+- Runtime action buttons no longer overflow the card at the default 1120-pixel window width.
+
 ## 2.0.0-beta.2
 
 This release turns the complete historical issue sweep into concrete v2 features and restores the full project documentation.

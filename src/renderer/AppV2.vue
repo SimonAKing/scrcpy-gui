@@ -147,6 +147,13 @@ let lastRecordedActionAt = 0
 const autoLaunchAttempted = new Set<string>()
 
 const t = (key: string): string => translate(config.locale, key)
+const runtimeVersion = (binary: 'scrcpy' | 'adb'): string => {
+  const value = environment.value?.[binary].version || ''
+  const match = binary === 'scrcpy'
+    ? value.match(/^scrcpy\s+([^\s]+)/i)
+    : value.match(/\bversion\s+([^\s]+)/i)
+  return match?.[1] || value || t('notFound')
+}
 const usableDevices = computed(() => devices.value.filter((device) => device.state === 'device'))
 const allSelected = computed(() =>
   usableDevices.value.length > 0 && usableDevices.value.every((device) => selectedSerials.value.includes(device.serial))
@@ -515,21 +522,23 @@ onBeforeUnmount(() => {
 
     <main>
       <section v-if="activeTab === 'devices'" class="runtime-card">
-        <div>
+        <div class="runtime-copy">
           <p class="eyebrow">{{ t('runtimeSetup') }}</p>
           <p class="muted">{{ t('runtimeHint') }}</p>
         </div>
-        <div class="runtime-statuses">
-          <span :class="['status-pill', environment?.scrcpy.ok ? 'ok' : 'bad']">
-            scrcpy · {{ environment?.scrcpy.ok ? environment.scrcpy.version : t('notFound') }}
-          </span>
-          <span :class="['status-pill', environment?.adb.ok ? 'ok' : 'bad']">
-            adb · {{ environment?.adb.ok ? environment.adb.version : t('notFound') }}
-          </span>
+        <div class="runtime-actions button-row nowrap">
+          <button class="secondary compact" @click="chooseScrcpy">{{ t('chooseScrcpy') }}</button>
+          <button class="ghost compact" :disabled="loadingEnvironment" @click="refreshEnvironment(true)">{{ t('recheck') }}</button>
         </div>
-        <div class="button-row nowrap">
-          <button class="secondary" @click="chooseScrcpy">{{ t('chooseScrcpy') }}</button>
-          <button class="ghost" :disabled="loadingEnvironment" @click="refreshEnvironment(true)">{{ t('recheck') }}</button>
+        <div class="runtime-statuses">
+          <div :class="['runtime-status', environment?.scrcpy.ok ? 'ok' : 'bad']">
+            <span class="runtime-status-name"><i />scrcpy</span>
+            <code :title="environment?.scrcpy.version">{{ runtimeVersion('scrcpy') }}</code>
+          </div>
+          <div :class="['runtime-status', environment?.adb.ok ? 'ok' : 'bad']">
+            <span class="runtime-status-name"><i />adb</span>
+            <code :title="environment?.adb.version">{{ runtimeVersion('adb') }}</code>
+          </div>
         </div>
       </section>
 
