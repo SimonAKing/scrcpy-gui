@@ -10,7 +10,7 @@
 >
 > 维护者：Simon Ma 与 Scrcpy GUI contributors
 
-> 实施进度（2026-08-15）：M1 的 OptionDescriptor、CapabilityRegistry、命令预览、SessionManager、DeviceTracker、结构化事件/错误、Sessions 页面和 Config V3 已落地；M2 的设备工作区、文件推送、APK 安装、应用列表/启动、ArtifactService、脱敏诊断包和 Issue helper 已落地，Profile 导入导出仍在实施。M0 的三平台真实设备矩阵、Chocolatey 社区审核和 Stable 验收仍待外部条件完成；M3–M4 尚未开始。
+> 实施进度（2026-08-15）：M1 的 OptionDescriptor、CapabilityRegistry、命令预览、SessionManager、DeviceTracker、结构化事件/错误、Sessions 页面和 Config V3 已落地；M2 的设备工作区、文件推送、APK 安装、应用列表/启动、ArtifactService、脱敏诊断包、Issue helper 和 Profile 导入导出已落地。M0 的三平台真实设备矩阵、Chocolatey 社区审核和 Stable 验收仍待外部条件完成；M3–M4 尚未开始。
 
 ## 0. 文档目的
 

@@ -8,6 +8,7 @@
 - Route new device operations through a shared argv-only ADB service and retain structured exit codes and package-manager details without exposing local source paths to the Renderer.
 - Persist screenshots, recordings, and file/APK reports in a reconciled main-process artifact library with missing/incomplete states and narrow open, reveal, copy, index-removal, and confirmed file-deletion operations.
 - Preview and export size-bounded local diagnostic ZIPs with default serial, address, path, and pairing-code redaction, then open a prefilled GitHub issue without uploading files or submitting on the user's behalf.
+- Export versioned declarative launch profiles and import them through a dry-run compatibility, unknown-field, path, and name-conflict review with explicit replace/copy and machine-local path choices.
 
 ## 2.0.0-beta.5
 

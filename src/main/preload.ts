@@ -6,6 +6,8 @@ import type {
   ArtifactQuery,
   BatchProgressEvent,
   FileConflictPolicy,
+  LaunchProfile,
+  ProfileImportStrategy,
   CommandPreviewRequest,
   DeviceControlAction,
   DeviceLaunch,
@@ -63,6 +65,10 @@ const api: ScrcpyApi = {
   previewDiagnostics: (runtime: RuntimeConfig) => ipcRenderer.invoke('diagnostics:preview', runtime),
   exportDiagnostics: (runtime: RuntimeConfig) => ipcRenderer.invoke('diagnostics:export', runtime),
   openIssueHelper: (artifactId?: string) => ipcRenderer.invoke('diagnostics:issue-helper', artifactId),
+  exportProfile: (profile: LaunchProfile) => ipcRenderer.invoke('profile:export', profile),
+  previewProfileImport: (runtime: RuntimeConfig) => ipcRenderer.invoke('profile:import-preview', runtime),
+  commitProfileImport: (token: string, strategy: ProfileImportStrategy, keepMachinePaths: boolean) =>
+    ipcRenderer.invoke('profile:import-commit', token, strategy, keepMachinePaths),
   setMinimizeToTray: (enabled: boolean) => ipcRenderer.invoke('app:minimize-to-tray', enabled),
   setQuitBehavior: (runtime: RuntimeConfig, killAdbOnQuit: boolean) =>
     ipcRenderer.invoke('app:quit-behavior', runtime, killAdbOnQuit),

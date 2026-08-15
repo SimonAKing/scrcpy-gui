@@ -118,6 +118,21 @@ describe('ConfigRepository', () => {
     expect(JSON.parse(await readFile(join(directory, 'config.json'), 'utf8'))).toMatchObject({ revision: 2 })
   })
 
+  it('round-trips bounded profile extension data for forward-compatible imports', async () => {
+    const { directory, store } = await repository()
+    const loaded = await store.load('', 'en')
+    const changed = structuredClone(loaded.config)
+    changed.profiles.push({
+      id: 'profile-with-extension',
+      name: 'Forward compatible',
+      launch: structuredClone(changed.launch),
+      extensions: { vendor: { feature: true, values: [1, 'two', null] } }
+    })
+    expect(await store.save(loaded.revision, changed)).toMatchObject({ ok: true })
+    const reloaded = await new ConfigRepository(directory, () => fixedNow).load('', 'en')
+    expect(reloaded.config.profiles[0].extensions).toEqual({ vendor: { feature: true, values: [1, 'two', null] } })
+  })
+
   it('bounds the legacy migration payload before parsing it', async () => {
     const { store } = await repository()
     await expect(store.load(`{"padding":"${'x'.repeat(2 * 1024 * 1024)}"}`, 'en')).rejects.toThrow('2 MB')

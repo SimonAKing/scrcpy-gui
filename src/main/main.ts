@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, n
 import { basename, extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, readFile, stat } from 'node:fs/promises'
 import { arch, homedir, platform, release } from 'node:os'
 import type {
   AutomationStep,
@@ -10,6 +10,7 @@ import type {
   DeviceControlAction,
   DeviceLaunch,
   FileConflictPolicy,
+  ProfileImportStrategy,
   Locale,
   OperationResult,
   PersistedConfig,
@@ -53,12 +54,13 @@ import {
 } from './ipcValidation'
 import { isTrustedRendererUrl, PRODUCTION_CSP } from './security'
 import { buildScrcpyArgDetails, prepareLaunchConfig } from './scrcpy'
-import { ConfigRepository } from './configRepository'
+import { ConfigRepository, validateLaunchProfile } from './configRepository'
 import { EventStore, validateEventQuery } from './eventStore'
 import { failureFromUnknown, operationFailure } from '../shared/errors'
 import { deviceWorkspaceService, validatePackageId, validateRemoteDirectory, type SelectedLocalFile } from './deviceWorkspaceService'
 import { ArtifactService } from './artifactService'
 import { diagnosticsService, type DiagnosticContext, type PreparedDiagnostics } from './diagnosticsService'
+import { profileTransferService } from './profileTransferService'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -95,7 +97,7 @@ function domainForChannel(channel: string): 'runtime' | 'device' | 'session' | '
   if (channel.includes('screenshot') || channel.startsWith('dialog:record') || channel.startsWith('artifact:') || channel.startsWith('diagnostics:')) return 'artifact'
   if (channel.startsWith('device:')) return 'device'
   if (channel.startsWith('session:') || channel.startsWith('scrcpy:')) return 'session'
-  if (channel.startsWith('config:')) return 'config'
+  if (channel.startsWith('config:') || channel.startsWith('profile:')) return 'config'
   return 'runtime'
 }
 
@@ -541,6 +543,71 @@ handle('config:load', (_event, legacyJson: string, requestedLocale: Locale) => {
 handle('config:save', (_event, revision: number, config: PersistedConfig) => {
   if (!configRepository) throw new Error('Configuration repository is not ready.')
   return configRepository.save(nonNegativeInteger(revision, 'config revision'), config)
+})
+handle('profile:export', async (_event, value: unknown) => {
+  try {
+    const profile = validateLaunchProfile(value, 'profile export')
+    const safeName = profile.name.trim().replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'profile'
+    const destination = await dialog.showSaveDialog({
+      title: 'Export launch profile',
+      defaultPath: join(app.getPath('documents'), `${safeName}.scrcpy-profile.json`),
+      filters: [{ name: 'Scrcpy GUI profile', extensions: ['json'] }]
+    })
+    if (destination.canceled || !destination.filePath) {
+      return operationFailure('PROFILE_EXPORT_CANCELED', 'profile-export', 'Profile export canceled.')
+    }
+    await profileTransferService.write(destination.filePath, profileTransferService.serialize(profile, app.getVersion()))
+    return { ok: true, data: destination.filePath }
+  } catch (error) {
+    return failureFromUnknown(error, 'PROFILE_EXPORT_FAILED', 'profile-export', 'Unable to export the profile.')
+  }
+})
+handle('profile:import-preview', async (_event, runtime: RuntimeConfig) => {
+  try {
+    const selection = await dialog.showOpenDialog({
+      title: 'Import launch profile', properties: ['openFile'],
+      filters: [{ name: 'Scrcpy GUI profile', extensions: ['json'] }]
+    })
+    if (selection.canceled || !selection.filePaths[0]) {
+      return operationFailure('PROFILE_IMPORT_CANCELED', 'profile-import-preview', 'Profile import canceled.')
+    }
+    const info = await stat(selection.filePaths[0])
+    if (!info.isFile() || info.size > 2 * 1024 * 1024) throw new TypeError('Profile file must be a regular file no larger than 2 MiB.')
+    const snapshot = configRepository?.snapshot()
+    if (!snapshot) throw new Error('Configuration repository is not ready.')
+    const environment = await getEnvironment(runtimeConfig(runtime))
+    const selectedVersion = environment.scrcpy.version.match(/\b(\d+\.\d+(?:\.\d+)?)/)?.[1] || '0.0'
+    return {
+      ok: true,
+      data: profileTransferService.preview(
+        await readFile(selection.filePaths[0], 'utf8'), snapshot.profiles, snapshot.locale, selectedVersion
+      )
+    }
+  } catch (error) {
+    return failureFromUnknown(error, 'PROFILE_IMPORT_PREVIEW_FAILED', 'profile-import-preview', 'Unable to preview the profile import.')
+  }
+})
+handle('profile:import-commit', (
+  _event,
+  token: string,
+  strategy: ProfileImportStrategy,
+  keepMachinePaths: boolean
+) => {
+  try {
+    const snapshot = configRepository?.snapshot()
+    if (!snapshot) throw new Error('Configuration repository is not ready.')
+    return {
+      ok: true,
+      data: profileTransferService.commit(
+        boundedString(token, 'profile import token', 128),
+        strategy,
+        strictBoolean(keepMachinePaths, 'keep machine-local paths'),
+        snapshot.profiles
+      )
+    }
+  } catch (error) {
+    return failureFromUnknown(error, 'PROFILE_IMPORT_COMMIT_FAILED', 'profile-import-commit', 'Unable to import the profile.')
+  }
 })
 handle('system:environment', (_event, runtime: RuntimeConfig) => getEnvironment(runtimeConfig(runtime)))
 handle('device:list', (_event, runtime: RuntimeConfig) => listDevices(runtimeConfig(runtime)))
