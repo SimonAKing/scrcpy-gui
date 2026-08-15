@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.0.0-beta.6
+
+This release completes the device workspace, local artifact, diagnostic export, and portable profile workflows planned for M2.
+
 ### Added
 
 - Add a device workspace with read-only device details, cached launchable app discovery/start, and reviewed multi-device file push and APK installation with bounded concurrency and per-target progress/results.
