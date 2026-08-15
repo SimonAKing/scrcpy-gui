@@ -25,7 +25,7 @@ The package dependency metadata contains permissive and weak-copyleft third-part
 - [x] The remaining #18 asset is removed instead of being relicensed by assumption.
 - [x] The current packaged runtime contains the upstream scrcpy Apache-2.0 license.
 - [x] The maintainer [publicly attests](https://github.com/SimonAKing/scrcpy-gui/pull/190#issuecomment-5303383152) that the Simon Ma-authored portions may be relicensed and are not restricted by an employer, school, or other IP agreement.
-- [x] The latest merged `master` passes local typecheck, 20 files / 182 tests, build, 11-icon check, and packaged-runtime license smoke on this branch.
+- [x] The latest merged `master` passes local typecheck, 21 files / 185 tests, build, 11-icon check, and packaged-runtime license smoke on this branch.
 - [x] The latest merged `master` passes [three-platform pull-request CI](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31898349699) on this branch (macOS 20s, Ubuntu 25s, Windows 49s).
 
 The remaining unchecked contributor-consent item is a merge blocker. Passing tests or maintainer ownership of other files cannot replace it.
