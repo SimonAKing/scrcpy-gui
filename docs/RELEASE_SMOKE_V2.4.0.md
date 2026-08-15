@@ -15,9 +15,9 @@ This record separates evidence collected before the tag from checks that run onl
 - packaged macOS arm64 `adb version`: Android Debug Bridge 1.0.41, platform-tools 37.0.0
 - no Android device was attached to the release host
 
-## Tag workflow gates
+## Published tag workflow result
 
-The `v2.4.0` tag is publishable only after the Release workflow:
+The [`v2.4.0` Release workflow](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31890315296) completed successfully on macOS, Windows, and Linux. It:
 
 1. runs the complete test suite on the macOS, Windows, and Linux packaging jobs;
 2. downloads the checksum-pinned official scrcpy 4.1 bundle;
@@ -26,7 +26,7 @@ The `v2.4.0` tag is publishable only after the Release workflow:
 5. uploads every package plus `SHA256SUMS.txt`;
 6. leaves Chocolatey Community publishing conditional on the real `CHOCO_API_KEY` secret.
 
-Expected assets are four macOS files, five Windows files plus `.nupkg`, four Linux files, and one checksum manifest (15 total). The release is not accepted if the workflow fails, the asset count differs, or any manifest entry does not match its uploaded file.
+The published [Scrcpy GUI 2.4.0 release](https://github.com/SimonAKing/scrcpy-gui/releases/tag/v2.4.0) is neither a draft nor a prerelease. It contains four macOS files, five Windows files plus `.nupkg`, four Linux files, and one checksum manifest (15 assets total). All 14 package entries in `SHA256SUMS.txt` were matched against the corresponding uploaded asset digests. The optional Chocolatey Community step reported that `CHOCO_API_KEY` was not configured and correctly skipped the external push; issue #139 therefore remains open.
 
 ## Explicitly unverified in this release run
 
