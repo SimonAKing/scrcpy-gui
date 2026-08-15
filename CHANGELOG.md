@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.0.0-beta.5
+
+This release completes the capability, configuration, device-tracking, command, and diagnostics foundations planned for M1.
+
 ### Added
 
 - Detect supported scrcpy scenes and probe commands from the selected runtime's real `--help` output instead of assuming every build has the same capabilities.
