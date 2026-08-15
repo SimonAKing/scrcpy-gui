@@ -45,7 +45,7 @@
     "appId": "com.simonaking.scrcpygui",
     "productName": "Scrcpy GUI",
     "copyright": "Copyright © 2019-2026 Simon Ma and contributors",
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "artifactName": "Scrcpy.GUI-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release"
     },
