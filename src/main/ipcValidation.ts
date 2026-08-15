@@ -1,5 +1,8 @@
 import type {
   AutomationStep,
+  AudioCodec,
+  AudioSource,
+  CameraFacing,
   CommandPreviewRequest,
   DeviceControlAction,
   DeviceLaunch,
@@ -8,10 +11,15 @@ import type {
   LaunchConfig,
   MouseMode,
   Orientation,
+  RecordFormat,
+  RecordOrientation,
   RuntimeConfig,
+  SceneKind,
   ShortcutModifier,
+  DisplayImePolicy,
   VideoCodec
 } from '../shared/types'
+import { normalizedLaunch } from '../shared/config'
 
 const MAX_PATH_LENGTH = 4096
 const MAX_SERIAL_LENGTH = 512
@@ -21,11 +29,21 @@ const MAX_AUTOMATION_STEPS = 200
 const MAX_AUTOMATION_DURATION_MS = 30 * 60 * 1000
 
 const orientations = new Set<Orientation>(['0', '90', '180', '270'])
+const recordOrientations = new Set<RecordOrientation>(['default', '0', '90', '180', '270'])
+const scenes = new Set<SceneKind>(['screen', 'camera', 'virtual-display', 'record-only', 'control-only', 'otg'])
 const shortcutModifiers = new Set<ShortcutModifier>(['default', 'lctrl', 'rctrl', 'lalt', 'ralt', 'lsuper', 'rsuper'])
-const keyboardModes = new Set<KeyboardMode>(['default', 'sdk', 'uhid', 'aoa'])
+const keyboardModes = new Set<KeyboardMode>(['default', 'sdk', 'uhid', 'aoa', 'disabled'])
 const mouseModes = new Set<MouseMode>(['default', 'sdk', 'uhid', 'aoa', 'disabled'])
 const gamepadModes = new Set<GamepadMode>(['default', 'uhid', 'aoa'])
 const videoCodecs = new Set<VideoCodec>(['default', 'h264', 'h265', 'av1', 'vp8', 'vp9'])
+const audioCodecs = new Set<AudioCodec>(['default', 'opus', 'aac', 'flac', 'raw'])
+const audioSources = new Set<AudioSource>([
+  'default', 'output', 'playback', 'mic', 'mic-unprocessed', 'mic-camcorder', 'mic-voice-recognition',
+  'mic-voice-communication', 'voice-call', 'voice-call-uplink', 'voice-call-downlink', 'voice-performance'
+])
+const cameraFacings = new Set<CameraFacing>(['default', 'front', 'back', 'external'])
+const recordFormats = new Set<RecordFormat>(['default', 'mp4', 'mkv', 'm4a', 'mka', 'opus', 'aac', 'flac', 'wav'])
+const displayImePolicies = new Set<DisplayImePolicy>(['default', 'local'])
 const previewSources = new Set<CommandPreviewRequest['source']>(['global', 'profile'])
 const controlActions = new Set<DeviceControlAction>([
   'back', 'home', 'app-switch', 'menu', 'volume-up', 'volume-down', 'power', 'screen-on', 'screen-off',
@@ -84,6 +102,29 @@ function geometry(value: unknown, name: 'crop' | 'window'): LaunchConfig[typeof 
   }
 }
 
+function size(value: unknown, name: 'cameraSize'): LaunchConfig[typeof name] {
+  const source = record(value, `launch.${name}`)
+  return {
+    width: finiteNumber(source.width, `launch.${name}.width`, 0, 32_768),
+    height: finiteNumber(source.height, `launch.${name}.height`, 0, 32_768)
+  }
+}
+
+function virtualDisplay(value: unknown): LaunchConfig['virtualDisplay'] {
+  const source = record(value, 'launch.virtualDisplay')
+  return {
+    width: finiteNumber(source.width, 'launch.virtualDisplay.width', 0, 32_768),
+    height: finiteNumber(source.height, 'launch.virtualDisplay.height', 0, 32_768),
+    dpi: finiteNumber(source.dpi, 'launch.virtualDisplay.dpi', 0, 2_000),
+    systemDecorations: strictBoolean(source.systemDecorations, 'launch.virtualDisplay.systemDecorations'),
+    destroyContent: strictBoolean(source.destroyContent, 'launch.virtualDisplay.destroyContent'),
+    flexDisplay: strictBoolean(source.flexDisplay, 'launch.virtualDisplay.flexDisplay'),
+    startApp: boundedString(source.startApp, 'launch.virtualDisplay.startApp', 512, true),
+    keepActive: strictBoolean(source.keepActive, 'launch.virtualDisplay.keepActive'),
+    imePolicy: enumValue(source.imePolicy, 'launch.virtualDisplay.imePolicy', displayImePolicies)
+  }
+}
+
 export function runtimeConfig(value: unknown): RuntimeConfig {
   const source = record(value, 'runtime')
   return { scrcpyPath: boundedString(source.scrcpyPath, 'runtime.scrcpyPath', MAX_PATH_LENGTH, true) }
@@ -105,7 +146,8 @@ export function controlAction(value: unknown): DeviceControlAction {
 }
 
 export function launchConfig(value: unknown): LaunchConfig {
-  const source = record(value, 'launch')
+  const raw = record(value, 'launch')
+  const source = normalizedLaunch(raw as Partial<LaunchConfig>) as unknown as Record<string, unknown>
   const extraArgs = boundedString(source.extraArgs, 'launch.extraArgs', MAX_EXTRA_ARGS_LENGTH, true)
   const lines = extraArgs.split(/\r?\n/).filter((line) => line.trim())
   if (lines.length > MAX_EXTRA_ARGS || lines.some((line) => line.length > 4096)) {
@@ -113,6 +155,7 @@ export function launchConfig(value: unknown): LaunchConfig {
   }
 
   return {
+    scene: enumValue(source.scene, 'launch.scene', scenes),
     windowTitle: boundedString(source.windowTitle, 'launch.windowTitle', 256, true),
     videoBitRate: finiteNumber(source.videoBitRate, 'launch.videoBitRate', 0, 1000),
     videoBuffer: finiteNumber(source.videoBuffer, 'launch.videoBuffer', 0, 60_000),
@@ -122,6 +165,10 @@ export function launchConfig(value: unknown): LaunchConfig {
     displayId: finiteNumber(source.displayId, 'launch.displayId', 0, 65_535),
     orientation: enumValue(source.orientation, 'launch.orientation', orientations),
     videoCodec: enumValue(source.videoCodec, 'launch.videoCodec', videoCodecs),
+    videoEncoder: boundedString(source.videoEncoder, 'launch.videoEncoder', 512, true),
+    audioCodec: enumValue(source.audioCodec, 'launch.audioCodec', audioCodecs),
+    audioEncoder: boundedString(source.audioEncoder, 'launch.audioEncoder', 512, true),
+    audioSource: enumValue(source.audioSource, 'launch.audioSource', audioSources),
     shortcutModifier: enumValue(source.shortcutModifier, 'launch.shortcutModifier', shortcutModifiers),
     keyboardMode: enumValue(source.keyboardMode, 'launch.keyboardMode', keyboardModes),
     mouseMode: enumValue(source.mouseMode, 'launch.mouseMode', mouseModes),
@@ -142,6 +189,22 @@ export function launchConfig(value: unknown): LaunchConfig {
     autoRecordName: booleanField(source, 'autoRecordName'),
     recordDirectory: boundedString(source.recordDirectory, 'launch.recordDirectory', MAX_PATH_LENGTH, true),
     noPlayback: booleanField(source, 'noPlayback'),
+    recordFormat: enumValue(source.recordFormat, 'launch.recordFormat', recordFormats),
+    recordOrientation: enumValue(source.recordOrientation, 'launch.recordOrientation', recordOrientations),
+    timeLimit: finiteNumber(source.timeLimit, 'launch.timeLimit', 0, 86_400),
+    recordVideo: booleanField(source, 'recordVideo'),
+    recordAudio: booleanField(source, 'recordAudio'),
+    cameraId: boundedString(source.cameraId, 'launch.cameraId', 512, true),
+    cameraFacing: enumValue(source.cameraFacing, 'launch.cameraFacing', cameraFacings),
+    cameraSize: size(source.cameraSize, 'cameraSize'),
+    cameraFps: finiteNumber(source.cameraFps, 'launch.cameraFps', 0, 1_000),
+    cameraHighSpeed: booleanField(source, 'cameraHighSpeed'),
+    cameraTorch: booleanField(source, 'cameraTorch'),
+    cameraZoom: finiteNumber(source.cameraZoom, 'launch.cameraZoom', 1, 100),
+    virtualDisplay: virtualDisplay(source.virtualDisplay),
+    v4l2Sink: boundedString(source.v4l2Sink, 'launch.v4l2Sink', MAX_PATH_LENGTH, true),
+    v4l2Buffer: finiteNumber(source.v4l2Buffer, 'launch.v4l2Buffer', 0, 60_000),
+    v4l2Playback: booleanField(source, 'v4l2Playback'),
     crop: geometry(source.crop, 'crop'),
     window: geometry(source.window, 'window'),
     extraArgs

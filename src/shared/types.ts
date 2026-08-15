@@ -50,14 +50,34 @@ export interface RuntimeConfig {
   scrcpyPath: string
 }
 
+export type SceneKind = 'screen' | 'camera' | 'virtual-display' | 'record-only' | 'control-only' | 'otg'
 export type Orientation = '0' | '90' | '180' | '270'
+export type RecordOrientation = 'default' | Orientation
 export type ShortcutModifier = 'default' | 'lctrl' | 'rctrl' | 'lalt' | 'ralt' | 'lsuper' | 'rsuper'
-export type KeyboardMode = 'default' | 'sdk' | 'uhid' | 'aoa'
+export type KeyboardMode = 'default' | 'sdk' | 'uhid' | 'aoa' | 'disabled'
 export type MouseMode = 'default' | 'sdk' | 'uhid' | 'aoa' | 'disabled'
 export type GamepadMode = 'default' | 'uhid' | 'aoa'
 export type VideoCodec = 'default' | 'h264' | 'h265' | 'av1' | 'vp8' | 'vp9'
+export type AudioCodec = 'default' | 'opus' | 'aac' | 'flac' | 'raw'
+export type AudioSource =
+  | 'default'
+  | 'output'
+  | 'playback'
+  | 'mic'
+  | 'mic-unprocessed'
+  | 'mic-camcorder'
+  | 'mic-voice-recognition'
+  | 'mic-voice-communication'
+  | 'voice-call'
+  | 'voice-call-uplink'
+  | 'voice-call-downlink'
+  | 'voice-performance'
+export type CameraFacing = 'default' | 'front' | 'back' | 'external'
+export type RecordFormat = 'default' | 'mp4' | 'mkv' | 'm4a' | 'mka' | 'opus' | 'aac' | 'flac' | 'wav'
+export type DisplayImePolicy = 'default' | 'local'
 
 export interface LaunchConfig {
+  scene: SceneKind
   windowTitle: string
   videoBitRate: number
   videoBuffer: number
@@ -67,6 +87,10 @@ export interface LaunchConfig {
   displayId: number
   orientation: Orientation
   videoCodec: VideoCodec
+  videoEncoder: string
+  audioCodec: AudioCodec
+  audioEncoder: string
+  audioSource: AudioSource
   shortcutModifier: ShortcutModifier
   keyboardMode: KeyboardMode
   mouseMode: MouseMode
@@ -87,6 +111,35 @@ export interface LaunchConfig {
   autoRecordName: boolean
   recordDirectory: string
   noPlayback: boolean
+  recordFormat: RecordFormat
+  recordOrientation: RecordOrientation
+  timeLimit: number
+  recordVideo: boolean
+  recordAudio: boolean
+  cameraId: string
+  cameraFacing: CameraFacing
+  cameraSize: {
+    width: number
+    height: number
+  }
+  cameraFps: number
+  cameraHighSpeed: boolean
+  cameraTorch: boolean
+  cameraZoom: number
+  virtualDisplay: {
+    width: number
+    height: number
+    dpi: number
+    systemDecorations: boolean
+    destroyContent: boolean
+    flexDisplay: boolean
+    startApp: string
+    keepActive: boolean
+    imePolicy: DisplayImePolicy
+  }
+  v4l2Sink: string
+  v4l2Buffer: number
+  v4l2Playback: boolean
   crop: {
     x: number
     y: number
@@ -120,7 +173,7 @@ export interface ProfileImportPreview {
   compatible: boolean
   warnings: string[]
   unknownFields: string[]
-  machineLocalPaths: Array<{ field: 'recordPath' | 'recordDirectory'; value: string }>
+  machineLocalPaths: Array<{ field: 'recordPath' | 'recordDirectory' | 'v4l2Sink'; value: string }>
   conflict?: { profileId: string; name: string }
 }
 
@@ -141,7 +194,7 @@ export interface CommandPreviewRequest extends DeviceLaunch {
   deviceWindowTitleOverride: boolean
 }
 
-export type CommandArgSource = 'session' | 'global' | 'profile' | 'device-override' | 'generated' | 'expert'
+export type CommandArgSource = 'session' | 'scene-default' | 'global' | 'profile' | 'device-override' | 'generated' | 'expert'
 
 export interface CommandArgDetail {
   arg: string
@@ -158,7 +211,6 @@ export interface CommandPreview {
   warnings: string[]
 }
 
-export type SceneKind = 'screen'
 export type SessionState = 'queued' | 'preflighting' | 'launching' | 'running' | 'stopping' | 'stopped' | 'failed'
 export type SessionStopReason = 'user' | 'boss-key' | 'app-quit' | 'process-exit' | 'launch-error'
 

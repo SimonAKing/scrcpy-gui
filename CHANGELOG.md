@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Model Camera, Virtual display, Record-only, Control-only, and OTG as validated launch scenes with official scrcpy 4.1 argv serialization, explicit conflicts, and portable Profile support.
+
 ## 2.0.0-beta.6
 
 This release completes the device workspace, local artifact, diagnostic export, and portable profile workflows planned for M2.

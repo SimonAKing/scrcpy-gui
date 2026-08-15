@@ -1,5 +1,6 @@
 import type { CommandArgDetail, CommandArgSource, Device, DeviceState, LaunchConfig } from '../shared/types'
 import { analyzeExpertArgs, serializeLaunchOptions, validatePortRange } from '../shared/options'
+import { serializeSceneOptions, type HostPlatform } from '../shared/scenes'
 import { join } from 'node:path'
 
 export { validatePortRange } from '../shared/options'
@@ -88,6 +89,16 @@ export function buildScrcpyArgDetails(
 ): { args: string[]; details: CommandArgDetail[]; warnings: string[] } {
   if (!serial.trim()) throw new Error('A device serial is required.')
   const details: CommandArgDetail[] = [{ arg: `--serial=${serial}`, optionKey: 'serial', helpKey: 'device', source: 'session' }]
+  const platform = process.platform as HostPlatform
+  for (const option of serializeSceneOptions(config, platform)) {
+    details.push(...option.args.map((arg) => ({
+      arg,
+      optionKey: option.key,
+      helpKey: option.helpKey,
+      source: option.key === 'scene' ? 'scene-default' as const : source,
+      sourceLabel: source === 'profile' && option.key !== 'scene' ? sourceLabel : undefined
+    })))
+  }
   for (const option of serializeLaunchOptions(config)) {
     for (const arg of option.args) {
       const optionSource: CommandArgSource = option.key === 'windowTitle' && deviceWindowTitleOverride

@@ -9,6 +9,7 @@ import type {
   SessionStopReason
 } from '../shared/types'
 import { operationFailure } from '../shared/errors'
+import { scenesConflict } from '../shared/scenes'
 
 export interface SessionLaunchRequest {
   executable: string
@@ -53,14 +54,10 @@ function snapshot(session: ScrcpySession): ScrcpySession {
   return { ...session, args: [...session.args] }
 }
 
-function conflictKey(serial: string, scene: SceneKind): string {
-  return `${serial}\0${scene}`
-}
-
 export class ScrcpySessionManager {
   private readonly sessions = new Map<string, ScrcpySession>()
   private readonly active = new Map<string, ActiveSession>()
-  private readonly activeConflicts = new Map<string, string>()
+  private readonly reservations = new Map<string, { serial: string; scene: SceneKind }>()
   private readonly listeners = new Set<SessionListener>()
   private readonly startupWindowMs: number
   private readonly stopGraceMs: number
@@ -103,12 +100,15 @@ export class ScrcpySessionManager {
       return this.fail(session, 'A device serial and scrcpy executable are required.', 'launch-error')
     }
 
-    const key = conflictKey(serial, request.scene)
-    if (this.activeConflicts.has(key)) {
-      return this.fail(session, 'An active screen session already exists for this device.', 'launch-error')
+    const conflict = [...this.reservations.entries()].find(([, reservation]) =>
+      reservation.serial === serial && scenesConflict(reservation.scene, request.scene)
+    )
+    if (conflict) {
+      const activeScene = conflict[1].scene
+      return this.fail(session, `An active ${activeScene} session conflicts with ${request.scene} for this device.`, 'launch-error')
     }
 
-    this.activeConflicts.set(key, session.id)
+    this.reservations.set(session.id, { serial, scene: request.scene })
     this.transition(session, 'launching', 'Starting scrcpy.')
 
     let child: ChildProcessWithoutNullStreams
@@ -201,7 +201,8 @@ export class ScrcpySessionManager {
   }
 
   stopBySerial(serial: string, reason: SessionStopReason = 'user'): OperationResult {
-    const id = this.activeConflicts.get(conflictKey(serial.trim(), 'screen'))
+    const normalized = serial.trim()
+    const id = [...this.reservations.entries()].find(([, reservation]) => reservation.serial === normalized)?.[0]
     return id ? this.stop(id, reason) : operationFailure(
       'SESSION_NOT_ACTIVE',
       'session-stop',
@@ -240,8 +241,7 @@ export class ScrcpySessionManager {
   }
 
   private releaseConflict(session: ScrcpySession): void {
-    const key = conflictKey(session.serialAtLaunch, session.scene)
-    if (this.activeConflicts.get(key) === session.id) this.activeConflicts.delete(key)
+    this.reservations.delete(session.id)
   }
 
   private emitOutput(session: ScrcpySession, message: string): void {

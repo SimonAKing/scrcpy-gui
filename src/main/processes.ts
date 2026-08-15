@@ -438,7 +438,7 @@ export async function startScrcpy(
       })
     }
 
-    const session = sessionManager.launch({ executable: scrcpyPath, serial, scene: 'screen', args })
+    const session = sessionManager.launch({ executable: scrcpyPath, serial, scene: launch.scene, args })
     if (session.state !== 'failed') started.push(serial)
   }
 

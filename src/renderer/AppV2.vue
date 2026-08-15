@@ -1236,7 +1236,7 @@ onBeforeUnmount(() => {
             <div class="inline-form"><input v-model.trim="profileName" maxlength="80" :placeholder="t('profileName')" /><button class="secondary" @click="saveProfile">{{ t('saveCurrentProfile') }}</button></div>
             <div v-if="profileImportPreview" class="profile-import-preview">
               <div class="profile-import-title">
-                <span><strong>{{ profileImportPreview.name }}</strong><small>screen · scrcpy ≥ {{ profileImportPreview.minScrcpyVersion }} · Scrcpy GUI {{ profileImportPreview.appVersion }}</small></span>
+                <span><strong>{{ profileImportPreview.name }}</strong><small>{{ profileImportPreview.scene }} · scrcpy ≥ {{ profileImportPreview.minScrcpyVersion }} · Scrcpy GUI {{ profileImportPreview.appVersion }}</small></span>
                 <span :class="['compatibility-badge', profileImportPreview.compatible ? 'ok' : 'warn']">{{ profileImportPreview.compatible ? t('compatible') : t('newerRuntimeRequired') }}</span>
               </div>
               <p v-for="warning in profileImportPreview.warnings" :key="warning" class="inline-warning">{{ warning }}</p>

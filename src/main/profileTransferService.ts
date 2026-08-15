@@ -10,15 +10,16 @@ import type {
   ProfileImportStrategy
 } from '../shared/types'
 import { normalizedLaunch } from '../shared/config'
-import { analyzeExpertArgs } from '../shared/options'
+import { analyzeExpertArgs, serializeLaunchOptions } from '../shared/options'
 import { launchConfig } from './ipcValidation'
 import { validateExtensions } from './configRepository'
+import { SCENE_KINDS, serializeSceneOptions, type HostPlatform } from '../shared/scenes'
 
 const MAX_PROFILE_BYTES = 2 * 1024 * 1024
 const CURRENT_SCRCPY_VERSION = '4.1'
 const knownDocumentFields = new Set(['schemaVersion', 'kind', 'appVersion', 'minScrcpyVersion', 'profile'])
 const knownProfileFields = new Set(['name', 'scene', 'options', 'expertArgs', 'extensions', 'machineLocalFields'])
-const knownOptionFields = new Set(Object.keys(normalizedLaunch()).filter((key) => key !== 'extraArgs'))
+const knownOptionFields = new Set(Object.keys(normalizedLaunch()).filter((key) => key !== 'extraArgs' && key !== 'scene'))
 
 interface PendingProfile {
   expiresAt: number
@@ -97,11 +98,14 @@ export class ProfileTransferService {
 
   serialize(profile: LaunchProfile, appVersion: string): string {
     const launch = launchConfig(profile.launch)
+    serializeSceneOptions(launch, process.platform as HostPlatform)
+    serializeLaunchOptions(launch)
     const args = analyzeExpertArgs(launch.extraArgs).args
-    const { extraArgs: _extraArgs, ...options } = structuredClone(launch)
+    const { extraArgs: _extraArgs, scene: _scene, ...options } = structuredClone(launch)
     const machineLocalFields = [
       ...(launch.recordPath ? ['profile.options.recordPath'] : []),
-      ...(launch.recordDirectory ? ['profile.options.recordDirectory'] : [])
+      ...(launch.recordDirectory ? ['profile.options.recordDirectory'] : []),
+      ...(launch.v4l2Sink ? ['profile.options.v4l2Sink'] : [])
     ]
     return `${JSON.stringify({
       schemaVersion: 1,
@@ -110,7 +114,7 @@ export class ProfileTransferService {
       minScrcpyVersion: '4.0',
       profile: {
         name: boundedString(profile.name, 'profile.name', 80),
-        scene: 'screen',
+        scene: launch.scene,
         options,
         expertArgs: args,
         extensions: structuredClone(profile.extensions || {}),
@@ -140,10 +144,15 @@ export class ProfileTransferService {
     const minScrcpyVersion = version(document.minScrcpyVersion, 'profile document minScrcpyVersion')
     const rawProfile = record(document.profile, 'profile')
     const name = boundedString(rawProfile.name, 'profile.name', 80)
-    if (rawProfile.scene !== 'screen') throw new TypeError('Only the screen scene can be imported by this version.')
+    if (typeof rawProfile.scene !== 'string' || !SCENE_KINDS.includes(rawProfile.scene as LaunchConfig['scene'])) {
+      throw new TypeError('Profile scene is not supported by this version.')
+    }
+    const scene = rawProfile.scene as LaunchConfig['scene']
     const rawOptions = record(rawProfile.options, 'profile.options')
     const extraArgs = expertArgs(rawProfile.expertArgs)
-    const launch = launchConfig({ ...normalizedLaunch(rawOptions as Partial<LaunchConfig>), extraArgs })
+    const launch = launchConfig({ ...normalizedLaunch(rawOptions as Partial<LaunchConfig>), scene, extraArgs })
+    serializeSceneOptions(launch, process.platform as HostPlatform)
+    serializeLaunchOptions(launch)
     const extensions = rawProfile.extensions === undefined
       ? undefined
       : validateExtensions(rawProfile.extensions, 'profile.extensions')
@@ -154,11 +163,12 @@ export class ProfileTransferService {
     ]
     const machineLocalPaths: ProfileImportPreview['machineLocalPaths'] = [
       ...(launch.recordPath ? [{ field: 'recordPath' as const, value: launch.recordPath }] : []),
-      ...(launch.recordDirectory ? [{ field: 'recordDirectory' as const, value: launch.recordDirectory }] : [])
+      ...(launch.recordDirectory ? [{ field: 'recordDirectory' as const, value: launch.recordDirectory }] : []),
+      ...(launch.v4l2Sink ? [{ field: 'v4l2Sink' as const, value: launch.v4l2Sink }] : [])
     ]
     const warnings = [
       ...(unknownFields.length ? [`${unknownFields.length} unknown fields will be reported and ignored.`] : []),
-      ...(machineLocalPaths.length ? ['Machine-local recording paths are disabled by default during import.'] : []),
+      ...(machineLocalPaths.length ? ['Machine-local output paths are disabled by default during import.'] : []),
       ...(compareVersions(minScrcpyVersion, currentScrcpyVersion) > 0
         ? [`This profile requires scrcpy ${minScrcpyVersion}; the selected runtime is ${currentScrcpyVersion}.`]
         : [])
@@ -171,7 +181,7 @@ export class ProfileTransferService {
     })
     const conflict = conflictFor(name, existingProfiles, locale)
     return {
-      token, name, scene: 'screen', appVersion, minScrcpyVersion,
+      token, name, scene, appVersion, minScrcpyVersion,
       compatible: compareVersions(minScrcpyVersion, currentScrcpyVersion) <= 0,
       warnings: [...warnings], unknownFields: [...unknownFields], machineLocalPaths: structuredClone(machineLocalPaths),
       conflict: conflict ? { profileId: conflict.id, name: conflict.name } : undefined
@@ -195,6 +205,7 @@ export class ProfileTransferService {
     if (!keepMachinePaths) {
       launch.recordPath = ''
       launch.recordDirectory = ''
+      launch.v4l2Sink = ''
       launch.recordEnabled = false
       launch.autoRecordName = false
     }
