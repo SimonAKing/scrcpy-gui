@@ -61,6 +61,7 @@ import { deviceWorkspaceService, validatePackageId, validateRemoteDirectory, typ
 import { ArtifactService } from './artifactService'
 import { diagnosticsService, type DiagnosticContext, type PreparedDiagnostics } from './diagnosticsService'
 import { profileTransferService } from './profileTransferService'
+import { deviceCapabilityService } from './deviceCapabilityService'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -98,6 +99,7 @@ function domainForChannel(channel: string): 'runtime' | 'device' | 'session' | '
   if (channel.startsWith('device:')) return 'device'
   if (channel.startsWith('session:') || channel.startsWith('scrcpy:')) return 'session'
   if (channel.startsWith('config:') || channel.startsWith('profile:')) return 'config'
+  if (channel.startsWith('capability:')) return 'runtime'
   return 'runtime'
 }
 
@@ -610,6 +612,21 @@ handle('profile:import-commit', (
   }
 })
 handle('system:environment', (_event, runtime: RuntimeConfig) => getEnvironment(runtimeConfig(runtime)))
+handle('capability:device-probe', async (_event, runtime: RuntimeConfig, serial: string, refresh = false) => {
+  try {
+    return {
+      ok: true,
+      data: await deviceCapabilityService.probe(
+        runtimeConfig(runtime), deviceSerial(serial), strictBoolean(refresh, 'refresh capabilities')
+      )
+    }
+  } catch (error) {
+    return failureFromUnknown(error, 'CAPABILITY_PROBE_FAILED', 'capability-probe', 'Unable to inspect device capabilities.', {
+      retryable: true,
+      suggestedActions: ['Confirm that the device is online.', 'Recheck the selected scrcpy runtime.']
+    })
+  }
+})
 handle('device:list', (_event, runtime: RuntimeConfig) => listDevices(runtimeConfig(runtime)))
 handle('device:track', (_event, runtime: RuntimeConfig) => startDeviceTracker(runtimeConfig(runtime)))
 handle('device:visibility', (_event, visible: boolean) => setDeviceTrackerVisibility(strictBoolean(visible, 'window visibility')))

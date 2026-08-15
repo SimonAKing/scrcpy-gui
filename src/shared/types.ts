@@ -487,6 +487,49 @@ export interface CapabilitySnapshot {
   }
 }
 
+export interface EncoderInfo {
+  kind: 'video' | 'audio'
+  codec: string
+  name: string
+  implementation: 'hw' | 'sw' | 'hybrid' | 'unknown'
+  vendor: boolean
+  aliasFor?: string
+}
+
+export interface DisplayInfo {
+  id: number
+  width?: number
+  height?: number
+}
+
+export interface CameraSizeInfo {
+  width: number
+  height: number
+  highSpeed: boolean
+  fps: number[]
+}
+
+export interface CameraInfo {
+  id: string
+  facing: 'front' | 'back' | 'external' | 'unknown'
+  sensorWidth: number
+  sensorHeight: number
+  fps: number[]
+  zoomRange?: { min: number; max: number }
+  sizes: CameraSizeInfo[]
+}
+
+export interface DeviceCapabilitySnapshot {
+  serial: string
+  capturedAt: string
+  cached: boolean
+  videoEncoders: EncoderInfo[]
+  audioEncoders: EncoderInfo[]
+  displays: DisplayInfo[]
+  cameras: CameraInfo[]
+  errors: Partial<Record<'encoders' | 'displays' | 'cameras' | 'cameraSizes', string>>
+}
+
 export interface OperationResult<T = undefined> {
   ok: boolean
   data?: T
@@ -551,6 +594,7 @@ export interface ScrcpyApi {
   exportProfile(profile: LaunchProfile): Promise<OperationResult<string>>
   previewProfileImport(runtime: RuntimeConfig): Promise<OperationResult<ProfileImportPreview>>
   commitProfileImport(token: string, strategy: ProfileImportStrategy, keepMachinePaths: boolean): Promise<OperationResult<ProfileImportCommit>>
+  probeDeviceCapabilities(runtime: RuntimeConfig, serial: string, refresh?: boolean): Promise<OperationResult<DeviceCapabilitySnapshot>>
   setMinimizeToTray(enabled: boolean): Promise<void>
   setQuitBehavior(runtime: RuntimeConfig, killAdbOnQuit: boolean): Promise<void>
   setBossKey(enabled: boolean, accelerator: string): Promise<OperationResult<string>>
