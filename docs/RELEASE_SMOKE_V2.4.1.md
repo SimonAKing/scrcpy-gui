@@ -23,3 +23,7 @@ The physical-device, signing/notarization, manual installer, and Chocolatey Comm
 - unsigned macOS x64/arm64 packaging;
 - the v2.4.1 arm64 final ZIP contains both project notices and the upstream runtime license;
 - the same final ZIP executes packaged scrcpy 4.1 and ADB 1.0.41.
+
+## Pull-request CI
+
+[PR #190](https://github.com/SimonAKing/scrcpy-gui/pull/190) passed the full validation workflow on macOS (23s), Ubuntu (27s), and Windows (59s).

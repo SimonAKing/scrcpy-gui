@@ -25,6 +25,6 @@ The package dependency metadata contains permissive and weak-copyleft third-part
 - [x] The remaining #18 asset is removed instead of being relicensed by assumption.
 - [x] The current packaged runtime contains the upstream scrcpy Apache-2.0 license.
 - [x] Local typecheck, 19 files / 174 tests, build, icon check, and packaged-runtime license smoke pass.
-- [ ] Three-platform pull-request CI passes.
+- [x] Three-platform pull-request CI passes (macOS 23s, Ubuntu 27s, Windows 59s).
 
 The maintainer must also confirm that no employer, school, or other agreement prevents licensing the maintainer-authored portions under MIT.
