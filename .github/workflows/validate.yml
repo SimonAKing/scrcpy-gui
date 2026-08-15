@@ -23,6 +23,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - if: runner.os == 'Linux'
+        run: npm run icons:check
       - run: npm run build
       - name: Validate Chocolatey metadata
         if: runner.os == 'Windows'

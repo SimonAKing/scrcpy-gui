@@ -6,6 +6,7 @@ release/
 vendor/
 build/*
 !build/icons
+!build/icon.svg
 !build/installer.nsh
 coverage
 node_modules/
