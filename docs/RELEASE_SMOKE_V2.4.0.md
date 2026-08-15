@@ -30,13 +30,13 @@ The published [Scrcpy GUI 2.4.0 release](https://github.com/SimonAKing/scrcpy-gu
 
 ## Published installer lifecycle result
 
-The post-release [`v2.0.0-beta.6` → `v2.4.0` installer lifecycle run](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31892365146) passed against downloaded GitHub Release assets:
+The post-release [`v2.0.0-beta.6` → `v2.4.0` installer lifecycle and startup run](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31892938302) passed against downloaded GitHub Release assets:
 
-- macOS (13s): architecture-matching DMG mount, previous app copy to `/Applications`, stable replacement, bundle/runtime version checks, and removal;
-- Windows (33s): x64 NSIS silent previous install, stable upgrade, registry/runtime version checks, and registered silent uninstall;
-- Ubuntu (43s): amd64 Debian package install, stable upgrade using Debian-native version metadata, runtime checks, and package removal.
+- macOS (22s): architecture-matching DMG mount, previous app copy to `/Applications`, stable replacement, installed Renderer startup, bundle/runtime version checks, and removal;
+- Windows (42s): x64 NSIS silent previous install, stable upgrade, installed Renderer startup, registry/runtime version checks, and registered silent uninstall;
+- Ubuntu (39s): amd64 Debian package install, stable upgrade using Debian-native version metadata, installed Renderer startup under Xvfb, runtime checks, and package removal.
 
-Every current asset was matched to its published `SHA256SUMS.txt` entry before installation. Each installed package then executed bundled scrcpy 4.1 and ADB 1.0.41. This is hosted-runner lifecycle evidence, not a claim that interactive installer wording, signing reputation, or retained user preferences were manually reviewed.
+Every current asset was matched to its published `SHA256SUMS.txt` entry before installation. Each installed package loaded its production `file://` Renderer through the real Electron executable, then executed bundled scrcpy 4.1 and ADB 1.0.41. This is hosted-runner lifecycle/startup evidence, not a claim that interactive installer wording, signing reputation, or retained user preferences were manually reviewed.
 
 ## Explicitly unverified in this release run
 
