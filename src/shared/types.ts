@@ -572,6 +572,8 @@ export interface ScrcpyApi {
   disconnect(runtime: RuntimeConfig, target: string): Promise<OperationResult<string>>
   start(runtime: RuntimeConfig, launches: DeviceLaunch[]): Promise<OperationResult<string[]>>
   preview(launches: CommandPreviewRequest[]): Promise<OperationResult<CommandPreview[]>>
+  startOtg(runtime: RuntimeConfig, launch: LaunchConfig, usbSerial: string): Promise<OperationResult<string>>
+  previewOtg(launch: LaunchConfig, usbSerial: string): Promise<OperationResult<CommandPreview>>
   listSessions(): Promise<ScrcpySession[]>
   stopSession(id: string): Promise<OperationResult>
   stop(serial: string): Promise<OperationResult>

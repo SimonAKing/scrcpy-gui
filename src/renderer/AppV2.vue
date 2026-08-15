@@ -15,6 +15,7 @@ import type {
   CommandPreview,
   Device,
   DeviceControlAction,
+  DeviceCapabilitySnapshot,
   DeviceOverview,
   DeviceTrackerEvent,
   EnvironmentStatus,
@@ -27,6 +28,7 @@ import type {
   PersistedConfig,
   ProfileImportPreview,
   ProfileImportStrategy,
+  SceneKind,
   ScrcpySession,
   ScrcpySessionEvent,
   ScrcpyStatusEvent,
@@ -109,6 +111,10 @@ const profileImportPreview = ref<ProfileImportPreview | null>(null)
 const profileImportStrategy = ref<ProfileImportStrategy>('duplicate')
 const keepImportedPaths = ref(false)
 const profileTransferBusy = ref(false)
+const probeSerial = ref('')
+const deviceCapabilities = ref<DeviceCapabilitySnapshot | null>(null)
+const probingCapabilities = ref(false)
+const otgUsbSerial = ref('')
 const controlSerial = ref('')
 const workspaceSection = ref<WorkspaceSection>('overview')
 const deviceOverview = ref<DeviceOverview | null>(null)
@@ -178,6 +184,33 @@ const availableCapabilities = computed(() => {
   const features = environment.value?.scrcpy.capabilities?.features
   return features ? capabilityFeatureKeys.filter((feature) => features[feature]) : []
 })
+const sceneKinds: SceneKind[] = ['screen', 'camera', 'virtual-display', 'record-only', 'control-only', 'otg']
+const sceneFeature: Record<SceneKind, keyof CapabilitySnapshot['features']> = {
+  screen: 'screen', camera: 'camera', 'virtual-display': 'virtualDisplay', 'record-only': 'recordOnly',
+  'control-only': 'controlOnly', otg: 'otg'
+}
+const selectedCamera = computed(() =>
+  deviceCapabilities.value?.cameras.find((camera) => camera.id === config.launch.cameraId)
+)
+const cameraSizes = computed(() => selectedCamera.value?.sizes.filter((size) =>
+  size.highSpeed === config.launch.cameraHighSpeed
+) || [])
+const cameraFpsOptions = computed(() => {
+  const selectedSize = cameraSizes.value.find((size) =>
+    size.width === config.launch.cameraSize.width && size.height === config.launch.cameraSize.height
+  )
+  return selectedSize?.fps.length ? selectedSize.fps : selectedCamera.value?.fps || []
+})
+const cameraSizeValue = computed({
+  get: () => config.launch.cameraSize.width ? `${config.launch.cameraSize.width}x${config.launch.cameraSize.height}` : '',
+  set: (value: string) => {
+    const match = value.match(/^(\d+)x(\d+)$/)
+    config.launch.cameraSize = match
+      ? { width: Number(match[1]), height: Number(match[2]) }
+      : { width: 0, height: 0 }
+  }
+})
+const visualScene = computed(() => ['screen', 'camera', 'virtual-display', 'record-only'].includes(config.launch.scene))
 const visibleLogs = computed(() => logs.value.filter((event) =>
   (logLevel.value === 'all' || event.level === logLevel.value) &&
   (logDomain.value === 'all' || event.domain === logDomain.value)
@@ -252,6 +285,26 @@ watch(usableDevices, (nextDevices) => {
   }
 })
 
+watch([selectedSerials, usableDevices], () => {
+  const available = new Set(usableDevices.value.map((device) => device.serial))
+  if (!available.has(probeSerial.value)) {
+    probeSerial.value = selectedSerials.value.find((serial) => available.has(serial)) || usableDevices.value[0]?.serial || ''
+  }
+})
+
+watch(probeSerial, () => {
+  deviceCapabilities.value = null
+})
+
+watch(() => config.launch.cameraHighSpeed, () => {
+  config.launch.cameraSize = { width: 0, height: 0 }
+  config.launch.cameraFps = 0
+})
+
+watch(() => config.launch.recordVideo, (enabled) => {
+  if (enabled && !['default', 'mp4', 'mkv'].includes(config.launch.recordFormat)) config.launch.recordFormat = 'default'
+})
+
 watch(controlSerial, () => {
   deviceOverview.value = null
   installedApps.value = []
@@ -315,8 +368,10 @@ async function applyDeviceSnapshot(nextDevices: Device[]): Promise<void> {
   if (environment.value?.scrcpy.ok) {
     for (const device of devices.value.filter((item) => item.state === 'device' && config.autoLaunchDevices[item.serial])) {
       if (autoLaunchAttempted.has(device.serial) || activeSerials.value.has(device.serial)) continue
+      const launch = launchSnapshot(device.serial)
+      if (launch.scene === 'otg') continue
       autoLaunchAttempted.add(device.serial)
-      const startResult = await window.scrcpy.start(runtimeSnapshot(), [{ serial: device.serial, launch: launchSnapshot(device.serial) }])
+      const startResult = await window.scrcpy.start(runtimeSnapshot(), [{ serial: device.serial, launch }])
       if (!startResult.ok) toast('error', operationErrorMessage(startResult, t('operationFailed')))
     }
   }
@@ -347,12 +402,30 @@ function toggleSelectAll(): void {
 }
 
 async function launchSelected(): Promise<void> {
+  if (config.launch.scene === 'otg') {
+    const result = await window.scrcpy.startOtg(runtimeSnapshot(), launchSnapshot(), otgUsbSerial.value.trim())
+    if (!result.ok) toast('error', operationErrorMessage(result, t('operationFailed')))
+    return
+  }
   const launches = selectedSerials.value.map((serial) => ({ serial, launch: launchSnapshot(serial) }))
+  if (launches.some((item) => item.launch.scene === 'otg')) {
+    toast('error', t('otgProfileLaunchHint'))
+    return
+  }
   const result = await window.scrcpy.start(runtimeSnapshot(), launches)
   if (!result.ok) toast('error', operationErrorMessage(result, t('operationFailed')))
 }
 
 async function previewSelected(): Promise<void> {
+  if (config.launch.scene === 'otg') {
+    const result = await window.scrcpy.previewOtg(launchSnapshot(), otgUsbSerial.value.trim())
+    if (!result.ok || !result.data) {
+      toast('error', operationErrorMessage(result, t('commandPreviewFailed')))
+      return
+    }
+    commandPreviews.value = [result.data]
+    return
+  }
   const launches = selectedSerials.value.map((serial) => {
     const profileId = config.deviceProfiles[serial]
     const profile = profileId ? config.profiles.find((item) => item.id === profileId) : undefined
@@ -365,12 +438,77 @@ async function previewSelected(): Promise<void> {
       deviceWindowTitleOverride: Boolean(config.deviceAliases[serial]?.trim() && !baseLaunch.windowTitle.trim())
     }
   })
+  if (launches.some((item) => item.launch.scene === 'otg')) {
+    toast('error', t('otgProfileLaunchHint'))
+    return
+  }
   const result = await window.scrcpy.preview(launches)
   if (!result.ok) {
     toast('error', operationErrorMessage(result, t('commandPreviewFailed')))
     return
   }
   commandPreviews.value = result.data || []
+}
+
+function sceneSupported(scene: SceneKind): boolean {
+  const features = environment.value?.scrcpy.capabilities?.features
+  return features ? features[sceneFeature[scene]] : true
+}
+
+function selectScene(scene: SceneKind): void {
+  if (!sceneSupported(scene)) return
+  config.launch.scene = scene
+  if (scene === 'record-only') {
+    config.launch.recordEnabled = true
+    config.launch.noPlayback = true
+  }
+  if (scene === 'control-only' && config.launch.mouseMode === 'sdk') config.launch.mouseMode = 'default'
+  if (scene === 'otg') {
+    if (config.launch.keyboardMode === 'sdk' || config.launch.keyboardMode === 'uhid') config.launch.keyboardMode = 'default'
+    if (config.launch.mouseMode === 'sdk' || config.launch.mouseMode === 'uhid') config.launch.mouseMode = 'default'
+    if (config.launch.gamepadMode === 'uhid') config.launch.gamepadMode = 'default'
+  }
+  commandPreviews.value = []
+}
+
+async function probeCapabilities(refresh = false): Promise<void> {
+  if (!probeSerial.value || probingCapabilities.value) return
+  probingCapabilities.value = true
+  const result = await window.scrcpy.probeDeviceCapabilities(runtimeSnapshot(), probeSerial.value, refresh)
+  probingCapabilities.value = false
+  if (!result.ok || !result.data) {
+    toast('error', operationErrorMessage(result, t('capabilityProbeFailed')))
+    return
+  }
+  deviceCapabilities.value = result.data
+}
+
+function selectCamera(event: Event): void {
+  config.launch.cameraId = (event.target as HTMLSelectElement).value
+  if (config.launch.cameraId) config.launch.cameraFacing = 'default'
+  config.launch.cameraSize = { width: 0, height: 0 }
+  config.launch.cameraHighSpeed = false
+  config.launch.cameraFps = 0
+}
+
+function applyVirtualDisplayPreset(preset: 'presentation' | 'desktop' | 'isolated'): void {
+  const startApp = config.launch.virtualDisplay.startApp || (preset === 'desktop' ? 'com.android.settings' : '')
+  if (preset === 'presentation') {
+    Object.assign(config.launch.virtualDisplay, {
+      width: 1920, height: 1080, dpi: 240, systemDecorations: true, destroyContent: true,
+      flexDisplay: false, keepActive: true, imePolicy: 'default', startApp
+    })
+  } else if (preset === 'desktop') {
+    Object.assign(config.launch.virtualDisplay, {
+      width: 1280, height: 960, dpi: 160, systemDecorations: true, destroyContent: false,
+      flexDisplay: true, keepActive: true, imePolicy: 'local', startApp
+    })
+  } else {
+    Object.assign(config.launch.virtualDisplay, {
+      width: 1280, height: 720, dpi: 240, systemDecorations: false, destroyContent: true,
+      flexDisplay: false, keepActive: true, imePolicy: 'local', startApp
+    })
+  }
 }
 
 function previewLabel(serial: string): string {
@@ -1008,8 +1146,80 @@ onBeforeUnmount(() => {
           <div class="button-row">
             <button class="ghost" :disabled="loadingDevices" @click="refreshDevices(true)">{{ t('refresh') }}</button>
             <button class="ghost" :disabled="!usableDevices.length" @click="toggleSelectAll">{{ t('selectAll') }}</button>
-            <button class="ghost" :disabled="!selectedSerials.length" @click="previewSelected">{{ t('previewCommand') }}</button>
-            <button class="primary" :disabled="!selectedSerials.length || !environment?.scrcpy.ok" @click="launchSelected">{{ t('launchSelected') }}</button>
+            <button class="ghost" :disabled="config.launch.scene !== 'otg' && !selectedSerials.length" @click="previewSelected">{{ t('previewCommand') }}</button>
+            <button class="primary" :disabled="!environment?.scrcpy.ok || config.launch.scene !== 'otg' && !selectedSerials.length" @click="launchSelected">{{ config.launch.scene === 'otg' ? t('launchOtg') : t('launchSelected') }}</button>
+          </div>
+        </section>
+
+        <section class="panel scene-builder">
+          <div class="panel-title scene-builder-title">
+            <div><p class="eyebrow">{{ t('sceneBuilder') }}</p><h2>{{ t(`scene_${config.launch.scene}`) }}</h2><p class="muted">{{ t(`sceneHint_${config.launch.scene}`) }}</p></div>
+            <span class="scene-step">{{ t('sceneReviewHint') }}</span>
+          </div>
+          <div class="scene-picker" role="list" :aria-label="t('chooseScene')">
+            <button v-for="scene in sceneKinds" :key="scene" :class="['scene-choice', { active: config.launch.scene === scene }]" :disabled="!sceneSupported(scene)" @click="selectScene(scene)">
+              <strong>{{ t(`scene_${scene}`) }}</strong><small>{{ sceneSupported(scene) ? t(`sceneShort_${scene}`) : t('unsupportedByRuntime') }}</small>
+            </button>
+          </div>
+
+          <div v-if="config.launch.scene !== 'otg'" class="scene-probe">
+            <div><strong>{{ t('deviceCapabilities') }}</strong><small>{{ t('deviceCapabilitiesHint') }}</small></div>
+            <select v-model="probeSerial"><option value="">{{ t('chooseDevice') }}</option><option v-for="device in usableDevices" :key="device.serial" :value="device.serial">{{ config.deviceAliases[device.serial] || device.model }} · {{ device.serial }}</option></select>
+            <button class="secondary compact" :disabled="!probeSerial || probingCapabilities" @click="probeCapabilities(Boolean(deviceCapabilities))">{{ probingCapabilities ? t('probing') : deviceCapabilities ? t('refreshCapabilities') : t('inspectDevice') }}</button>
+            <span v-if="deviceCapabilities" class="capability-cache">{{ deviceCapabilities.cached ? t('cachedResult') : t('liveResult') }} · {{ new Date(deviceCapabilities.capturedAt).toLocaleTimeString() }}</span>
+          </div>
+          <div v-if="deviceCapabilities && Object.keys(deviceCapabilities.errors).length" class="probe-errors">
+            <span v-for="(error, probe) in deviceCapabilities.errors" :key="probe"><strong>{{ probe }}</strong>{{ error }}</span>
+          </div>
+
+          <div class="scene-form">
+            <section v-if="config.launch.scene === 'screen'" class="scene-form-card">
+              <div><strong>{{ t('screenSource') }}</strong><small>{{ t('screenSourceHint') }}</small></div>
+              <label><span>{{ t('displayId') }}</span><select v-if="deviceCapabilities?.displays.length" v-model.number="config.launch.displayId"><option v-for="display in deviceCapabilities.displays" :key="display.id" :value="display.id">#{{ display.id }} · {{ display.width ? `${display.width}×${display.height}` : t('unknownSize') }}</option></select><input v-else v-model.number="config.launch.displayId" type="number" min="0" /></label>
+              <div class="field-pair"><label><span>{{ t('maxSize') }}</span><input v-model.number="config.launch.maxSize" type="number" min="0" /></label><label><span>{{ t('maxFps') }}</span><input v-model.number="config.launch.maxFps" type="number" min="0" /></label></div>
+            </section>
+
+            <section v-if="config.launch.scene === 'camera'" class="scene-form-card camera-wizard">
+              <div><strong>{{ t('cameraSource') }}</strong><small>{{ t('cameraSourceHint') }}</small></div>
+              <label v-if="deviceCapabilities?.cameras.length"><span>{{ t('camera') }}</span><select :value="config.launch.cameraId" @change="selectCamera"><option value="">{{ t('automatic') }}</option><option v-for="camera in deviceCapabilities.cameras" :key="camera.id" :value="camera.id">#{{ camera.id }} · {{ t(`cameraFacing_${camera.facing}`) }} · {{ camera.sensorWidth }}×{{ camera.sensorHeight }}</option></select></label>
+              <div v-else class="field-pair"><label><span>{{ t('cameraId') }}</span><input v-model.trim="config.launch.cameraId" placeholder="0" /></label><label><span>{{ t('cameraFacing') }}</span><select v-model="config.launch.cameraFacing"><option value="default">{{ t('automatic') }}</option><option value="front">{{ t('cameraFacing_front') }}</option><option value="back">{{ t('cameraFacing_back') }}</option><option value="external">{{ t('cameraFacing_external') }}</option></select></label></div>
+              <div class="field-pair"><label><span>{{ t('cameraSize') }}</span><select v-if="cameraSizes.length" v-model="cameraSizeValue"><option value="">{{ t('automatic') }}</option><option v-for="size in cameraSizes" :key="`${size.width}x${size.height}-${size.highSpeed}`" :value="`${size.width}x${size.height}`">{{ size.width }}×{{ size.height }}<template v-if="size.fps.length"> · {{ size.fps.join('/') }} fps</template></option></select><div v-else class="number-row two"><input v-model.number="config.launch.cameraSize.width" type="number" min="0" placeholder="1920" /><input v-model.number="config.launch.cameraSize.height" type="number" min="0" placeholder="1080" /></div></label><label><span>{{ t('cameraFps') }}</span><select v-if="cameraFpsOptions.length" v-model.number="config.launch.cameraFps"><option :value="0">{{ t('automatic') }}</option><option v-for="fps in cameraFpsOptions" :key="fps" :value="fps">{{ fps }} fps</option></select><input v-else v-model.number="config.launch.cameraFps" type="number" min="0" /></label></div>
+              <div class="field-pair"><label><span>{{ t('cameraZoom') }}</span><input v-model.number="config.launch.cameraZoom" type="number" min="1" :max="selectedCamera?.zoomRange?.max || 100" step="0.1" /><small v-if="selectedCamera?.zoomRange">{{ selectedCamera.zoomRange.min }}–{{ selectedCamera.zoomRange.max }}×</small></label><label><span>{{ t('audioSource') }}</span><select v-model="config.launch.audioSource"><option value="default">{{ t('cameraMicrophoneDefault') }}</option><option value="mic">{{ t('audioSource_mic') }}</option><option value="mic-camcorder">{{ t('audioSource_camcorder') }}</option><option value="output">{{ t('audioSource_output') }}</option><option value="playback">{{ t('audioSource_playback') }}</option></select></label></div>
+              <label v-if="selectedCamera?.sizes.some(size => size.highSpeed)" class="toggle"><input v-model="config.launch.cameraHighSpeed" type="checkbox" /><span>{{ t('cameraHighSpeed') }}</span></label>
+              <div v-if="environment?.scrcpy.capabilities?.features.v4l2" class="v4l2-fields"><label><span>{{ t('v4l2Sink') }}</span><input v-model.trim="config.launch.v4l2Sink" placeholder="/dev/video2" /></label><label><span>{{ t('v4l2Buffer') }}</span><input v-model.number="config.launch.v4l2Buffer" type="number" min="0" /></label><label class="toggle"><input v-model="config.launch.v4l2Playback" type="checkbox" /><span>{{ t('v4l2Playback') }}</span></label></div>
+            </section>
+
+            <section v-if="config.launch.scene === 'virtual-display'" class="scene-form-card">
+              <div><strong>{{ t('virtualDisplay') }}</strong><small>{{ t('virtualDisplayHint') }}</small></div>
+              <div class="preset-row"><button class="ghost compact" @click="applyVirtualDisplayPreset('presentation')">{{ t('presetPresentation') }}</button><button class="ghost compact" @click="applyVirtualDisplayPreset('desktop')">{{ t('presetDesktop') }}</button><button class="ghost compact" @click="applyVirtualDisplayPreset('isolated')">{{ t('presetIsolated') }}</button></div>
+              <label><span>{{ t('startAppPackage') }}</span><input v-model.trim="config.launch.virtualDisplay.startApp" list="launchable-apps" placeholder="com.android.settings" /><datalist id="launchable-apps"><option v-for="app in visibleApps" :key="app.packageId" :value="app.packageId">{{ app.label }}</option></datalist></label>
+              <div class="field-triple"><label><span>{{ t('width') }}</span><input v-model.number="config.launch.virtualDisplay.width" type="number" min="0" /></label><label><span>{{ t('height') }}</span><input v-model.number="config.launch.virtualDisplay.height" type="number" min="0" /></label><label><span>DPI</span><input v-model.number="config.launch.virtualDisplay.dpi" type="number" min="0" /></label></div>
+              <div class="toggle-grid compact-grid"><label class="toggle"><input v-model="config.launch.virtualDisplay.systemDecorations" type="checkbox" /><span>{{ t('systemDecorations') }}</span></label><label class="toggle"><input v-model="config.launch.virtualDisplay.destroyContent" type="checkbox" /><span>{{ t('destroyContent') }}</span></label><label class="toggle"><input v-model="config.launch.virtualDisplay.flexDisplay" type="checkbox" /><span>{{ t('flexDisplay') }}</span></label><label class="toggle"><input v-model="config.launch.virtualDisplay.keepActive" type="checkbox" /><span>{{ t('keepActive') }}</span></label></div>
+              <label><span>{{ t('displayImePolicy') }}</span><select v-model="config.launch.virtualDisplay.imePolicy"><option value="default">{{ t('defaultDisplay') }}</option><option value="local">{{ t('localDisplay') }}</option></select></label>
+            </section>
+
+            <section v-if="config.launch.scene === 'record-only'" class="scene-form-card">
+              <div><strong>{{ t('recordOnlySetup') }}</strong><small>{{ t('recordOnlyHint') }}</small></div>
+              <label v-if="config.launch.autoRecordName"><span>{{ t('recordDirectory') }}</span><div class="input-action"><input v-model="config.launch.recordDirectory" /><button class="ghost compact" @click="chooseRecordDirectory">{{ t('chooseFolder') }}</button></div></label><label v-else><span>{{ t('recordPath') }}</span><div class="input-action"><input v-model="config.launch.recordPath" /><button class="ghost compact" @click="chooseRecordPath">{{ t('chooseFile') }}</button></div></label>
+              <div class="field-pair"><label><span>{{ t('recordFormat') }}</span><select v-model="config.launch.recordFormat"><option value="default">{{ t('automatic') }}</option><option value="mp4">MP4</option><option value="mkv">MKV</option><template v-if="!config.launch.recordVideo"><option value="m4a">M4A</option><option value="mka">MKA</option><option value="opus">Opus</option><option value="aac">AAC</option><option value="flac">FLAC</option><option value="wav">WAV</option></template></select></label><label><span>{{ t('timeLimit') }}</span><input v-model.number="config.launch.timeLimit" type="number" min="0" max="86400" /></label></div>
+              <div class="toggle-grid compact-grid"><label class="toggle"><input v-model="config.launch.autoRecordName" type="checkbox" /><span>{{ t('autoRecordName') }}</span></label><label class="toggle"><input v-model="config.launch.recordVideo" type="checkbox" /><span>{{ t('recordVideo') }}</span></label><label class="toggle"><input v-model="config.launch.recordAudio" type="checkbox" /><span>{{ t('recordAudio') }}</span></label></div>
+            </section>
+
+            <section v-if="config.launch.scene === 'control-only' || config.launch.scene === 'otg'" class="scene-form-card">
+              <div><strong>{{ config.launch.scene === 'otg' ? t('otgInput') : t('controlOnlyInput') }}</strong><small>{{ t(config.launch.scene === 'otg' ? 'otgInputHint' : 'controlOnlyInputHint') }}</small></div>
+              <label v-if="config.launch.scene === 'otg'"><span>{{ t('optionalUsbSerial') }}</span><input v-model.trim="otgUsbSerial" :placeholder="t('singleUsbAutomatic')" /><small>{{ t('otgNoAdbHint') }}</small></label>
+              <div class="field-triple"><label><span>{{ t('keyboardMode') }}</span><select v-model="config.launch.keyboardMode"><option value="default">{{ t('automatic') }}</option><option v-if="config.launch.scene !== 'otg'" value="sdk">SDK</option><option v-if="config.launch.scene !== 'otg'" value="uhid">UHID</option><option value="aoa">AOA</option><option value="disabled">{{ t('disabled') }}</option></select></label><label><span>{{ t('mouseMode') }}</span><select v-model="config.launch.mouseMode"><option value="default">{{ t('automatic') }}</option><option v-if="config.launch.scene !== 'otg'" value="sdk">SDK</option><option v-if="config.launch.scene !== 'otg'" value="uhid">UHID</option><option value="aoa">AOA</option><option value="disabled">{{ t('disabled') }}</option></select></label><label><span>{{ t('gamepadMode') }}</span><select v-model="config.launch.gamepadMode"><option value="default">{{ t('disabled') }}</option><option v-if="config.launch.scene !== 'otg'" value="uhid">UHID</option><option value="aoa">AOA</option></select></label></div>
+            </section>
+
+            <section v-if="visualScene" class="scene-form-card media-options">
+              <div><strong>{{ t('mediaEncoding') }}</strong><small>{{ t('mediaEncodingHint') }}</small></div>
+              <div class="field-pair"><label><span>{{ t('codec') }}</span><select v-model="config.launch.videoCodec"><option value="default">{{ t('automatic') }}</option><option value="h264">H.264</option><option value="h265">H.265</option><option value="av1">AV1</option><option value="vp8">VP8</option><option value="vp9">VP9</option></select></label><label><span>{{ t('videoEncoder') }}</span><select v-if="deviceCapabilities?.videoEncoders.length" v-model="config.launch.videoEncoder"><option value="">{{ t('automatic') }}</option><option v-for="encoder in deviceCapabilities.videoEncoders" :key="`${encoder.codec}-${encoder.name}`" :value="encoder.name">{{ encoder.codec }} · {{ encoder.name }} · {{ encoder.implementation }}</option></select><input v-else v-model.trim="config.launch.videoEncoder" :placeholder="t('automatic')" /></label></div>
+              <div class="field-pair"><label><span>{{ t('audioCodec') }}</span><select v-model="config.launch.audioCodec"><option value="default">{{ t('automatic') }}</option><option value="opus">Opus</option><option value="aac">AAC</option><option value="flac">FLAC</option><option value="raw">RAW</option></select></label><label><span>{{ t('audioEncoder') }}</span><select v-if="deviceCapabilities?.audioEncoders.length" v-model="config.launch.audioEncoder"><option value="">{{ t('automatic') }}</option><option v-for="encoder in deviceCapabilities.audioEncoders" :key="`${encoder.codec}-${encoder.name}`" :value="encoder.name">{{ encoder.codec }} · {{ encoder.name }} · {{ encoder.implementation }}</option></select><input v-else v-model.trim="config.launch.audioEncoder" :placeholder="t('automatic')" /></label></div>
+            </section>
+          </div>
+          <div class="scene-builder-actions">
+            <span>{{ config.launch.scene === 'otg' ? t('automaticUsbTarget') : `${t('selectedTargets')}: ${selectedSerials.length}` }}</span>
+            <div class="button-row"><button class="ghost" :disabled="config.launch.scene !== 'otg' && !selectedSerials.length" @click="previewSelected">{{ t('previewCommand') }}</button><button class="primary" :disabled="!environment?.scrcpy.ok || config.launch.scene !== 'otg' && !selectedSerials.length" @click="launchSelected">{{ config.launch.scene === 'otg' ? t('launchOtg') : t('launchSelected') }}</button></div>
           </div>
         </section>
 
@@ -1257,7 +1467,7 @@ onBeforeUnmount(() => {
             <div v-if="config.profiles.length" class="saved-list">
               <div v-for="profile in config.profiles" :key="profile.id" class="saved-row">
                 <input :value="profile.name" :aria-label="t('profileName')" maxlength="80" @change="renameProfile(profile, $event)" />
-                <div class="profile-summary">{{ profile.launch.maxSize || t('automatic') }} px · {{ profile.launch.videoBitRate }} Mbps<span v-if="profile.launch.crop.width"> · {{ profile.launch.crop.width }}×{{ profile.launch.crop.height }}</span></div>
+                <div class="profile-summary">{{ t(`scene_${profile.launch.scene}`) }} · {{ profile.launch.maxSize || t('automatic') }} px · {{ profile.launch.videoBitRate }} Mbps<span v-if="profile.launch.crop.width"> · {{ profile.launch.crop.width }}×{{ profile.launch.crop.height }}</span></div>
                 <div class="button-row profile-actions"><button class="ghost compact" @click="applyProfile(profile)">{{ t('load') }}</button><button class="secondary compact" @click="updateProfile(profile)">{{ t('update') }}</button><button class="ghost compact" :disabled="profileTransferBusy" @click="exportProfile(profile)">{{ t('export') }}</button><button class="ghost compact" @click="deleteProfile(profile.id)">{{ t('delete') }}</button></div>
               </div>
             </div>
@@ -1266,7 +1476,7 @@ onBeforeUnmount(() => {
             <h2>{{ t('general') }}</h2>
             <label><span>{{ t('windowTitle') }}</span><input v-model="config.launch.windowTitle" placeholder="Android" /></label>
             <label><span>{{ t('shortcutModifier') }}</span><select v-model="config.launch.shortcutModifier"><option value="default">System default</option><option value="lctrl">Left Ctrl</option><option value="rctrl">Right Ctrl</option><option value="lalt">Left Alt</option><option value="ralt">Right Alt</option><option value="lsuper">Left Super</option><option value="rsuper">Right Super</option></select><small>{{ t('shortcutHint') }}</small></label>
-            <label><span>{{ t('keyboardMode') }}</span><select v-model="config.launch.keyboardMode"><option value="default">Default</option><option value="sdk">SDK</option><option value="uhid">UHID</option><option value="aoa">AOA</option></select></label>
+            <label><span>{{ t('keyboardMode') }}</span><select v-model="config.launch.keyboardMode"><option value="default">Default</option><option value="sdk">SDK</option><option value="uhid">UHID</option><option value="aoa">AOA</option><option value="disabled">Disabled</option></select></label>
             <div class="field-pair"><label><span>{{ t('mouseMode') }}</span><select v-model="config.launch.mouseMode"><option value="default">Default</option><option value="sdk">SDK</option><option value="uhid">UHID</option><option value="aoa">AOA</option><option value="disabled">Disabled</option></select></label><label><span>{{ t('gamepadMode') }}</span><select v-model="config.launch.gamepadMode"><option value="default">Disabled</option><option value="uhid">UHID</option><option value="aoa">AOA</option></select></label></div>
           </section>
 

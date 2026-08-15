@@ -7,6 +7,7 @@ import type {
   BatchProgressEvent,
   FileConflictPolicy,
   LaunchProfile,
+  LaunchConfig,
   ProfileImportStrategy,
   CommandPreviewRequest,
   DeviceControlAction,
@@ -39,6 +40,9 @@ const api: ScrcpyApi = {
   start: (runtime: RuntimeConfig, launches: DeviceLaunch[]) =>
     ipcRenderer.invoke('scrcpy:start', runtime, launches),
   preview: (launches: CommandPreviewRequest[]) => ipcRenderer.invoke('scrcpy:preview', launches),
+  startOtg: (runtime: RuntimeConfig, launch: LaunchConfig, usbSerial: string) =>
+    ipcRenderer.invoke('scrcpy:start-otg', runtime, launch, usbSerial),
+  previewOtg: (launch: LaunchConfig, usbSerial: string) => ipcRenderer.invoke('scrcpy:preview-otg', launch, usbSerial),
   listSessions: () => ipcRenderer.invoke('session:list'),
   stopSession: (id: string) => ipcRenderer.invoke('session:stop', id),
   stop: (serial: string) => ipcRenderer.invoke('scrcpy:stop', serial),

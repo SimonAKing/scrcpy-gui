@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
-import { writeFile } from 'node:fs/promises'
+import { constants as fsConstants } from 'node:fs'
+import { access, stat, statfs, writeFile } from 'node:fs/promises'
+import { dirname, resolve as resolvePath } from 'node:path'
 import type {
   AutomationStep,
   Device,
@@ -7,6 +9,7 @@ import type {
   DeviceLaunch,
   DeviceTrackerEvent,
   EnvironmentStatus,
+  LaunchConfig,
   OperationResult,
   RuntimeConfig,
   ScrcpySession,
@@ -398,6 +401,18 @@ export function listScrcpySessions(): ScrcpySession[] {
   return sessionManager.list()
 }
 
+export function duplicateRecordingPath(launches: DeviceLaunch[]): string | undefined {
+  const seen = new Set<string>()
+  for (const { launch } of launches) {
+    if (!launch.recordEnabled || launch.autoRecordName || !launch.recordPath.trim()) continue
+    const resolved = resolvePath(launch.recordPath.trim())
+    const key = process.platform === 'win32' ? resolved.toLocaleLowerCase() : resolved
+    if (seen.has(key)) return resolved
+    seen.add(key)
+  }
+  return undefined
+}
+
 export async function startScrcpy(
   runtime: RuntimeConfig,
   launches: DeviceLaunch[]
@@ -426,19 +441,28 @@ export async function startScrcpy(
       .map((request) => [request.serial.trim(), { serial: request.serial.trim(), launch: request.launch }])
   ).values()]
   if (uniqueLaunches.length === 0) return operationFailure('DEVICE_REQUIRED', 'validation', 'Select at least one device.')
+  if (duplicateRecordingPath(uniqueLaunches)) {
+    return operationFailure('RECORDING_PATH_CONFLICT', 'session-preflight', 'Multiple devices cannot record to the same file.', {
+      suggestedActions: ['Enable automatic recording names or choose a distinct Profile path for each device.']
+    })
+  }
 
-  const started: string[] = []
+  const preparedLaunches: Array<{ serial: string; scene: LaunchConfig['scene']; args: string[] }> = []
   for (const { serial, launch } of uniqueLaunches) {
-    let args: string[]
     try {
-      args = buildScrcpyArgs(prepareLaunchConfig(launch, serial), serial)
+      const prepared = prepareLaunchConfig(launch, serial)
+      await preflightLaunchOutputs(prepared)
+      preparedLaunches.push({ serial, scene: launch.scene, args: buildScrcpyArgs(prepared, serial) })
     } catch (error) {
       return failureFromUnknown(error, 'SESSION_OPTIONS_INVALID', 'session-preflight', 'Unable to prepare the scrcpy command.', {
         suggestedActions: ['Review the command preview and expert arguments.']
       })
     }
+  }
 
-    const session = sessionManager.launch({ executable: scrcpyPath, serial, scene: launch.scene, args })
+  const started: string[] = []
+  for (const { serial, scene, args } of preparedLaunches) {
+    const session = sessionManager.launch({ executable: scrcpyPath, serial, scene, args })
     if (session.state !== 'failed') started.push(serial)
   }
 
@@ -448,6 +472,58 @@ export async function startScrcpy(
       retryable: true,
       suggestedActions: ['Review the Sessions page and structured events for details.']
     })
+}
+
+export async function preflightLaunchOutputs(launch: LaunchConfig): Promise<void> {
+  if (launch.recordEnabled && launch.recordPath.trim()) {
+    const directory = dirname(launch.recordPath.trim())
+    await access(directory, fsConstants.W_OK)
+    const fileSystem = await statfs(directory)
+    const available = Number(fileSystem.bavail) * Number(fileSystem.bsize)
+    if (Number.isFinite(available) && available < 64 * 1024 * 1024) {
+      throw new Error('Recording destination has less than 64 MiB available.')
+    }
+  }
+  if (launch.v4l2Sink.trim()) {
+    const sink = await stat(launch.v4l2Sink.trim())
+    if (!sink.isCharacterDevice()) throw new Error('V4L2 sink is not a character device.')
+    await access(launch.v4l2Sink.trim(), fsConstants.W_OK)
+  }
+}
+
+export async function startOtg(
+  runtime: RuntimeConfig,
+  launch: LaunchConfig,
+  usbSerial: string
+): Promise<OperationResult<string>> {
+  const scrcpyPath = await resolveBinary(runtime, 'scrcpy')
+  if (!scrcpyPath) return operationFailure('SCRCPY_NOT_FOUND', 'otg-preflight', 'scrcpy executable not found.')
+  if (launch.scene !== 'otg') return operationFailure('OTG_SCENE_REQUIRED', 'validation', 'OTG launch requires the OTG scene.')
+  try {
+    const result = await executeCommand(scrcpyPath, ['--version'])
+    const version = firstVersionLine(`${result.stdout}\n${result.stderr}`, 'scrcpy')
+    if (!isSupportedScrcpyVersion(version)) {
+      return operationFailure('SCRCPY_UNSUPPORTED', 'otg-preflight', `scrcpy 4.x or newer is required; found ${version}.`)
+    }
+    const serial = usbSerial.trim()
+    const args = buildScrcpyArgs(launch, serial)
+    const session = sessionManager.launch({
+      executable: scrcpyPath,
+      serial: serial || 'otg:auto-usb',
+      scene: 'otg',
+      args
+    })
+    return session.state === 'failed'
+      ? operationFailure('OTG_START_FAILED', 'otg-launch', session.error || 'Unable to start OTG mode.', {
+        suggestedActions: ['Disconnect other USB devices or enter the USB serial.', 'Review the Sessions page for USB permission errors.']
+      })
+      : { ok: true, data: session.id }
+  } catch (error) {
+    return failureFromUnknown(error, 'OTG_PREFLIGHT_FAILED', 'otg-preflight', 'Unable to prepare OTG mode.', {
+      retryable: true,
+      suggestedActions: ['Confirm that the device is connected over USB.', 'Review platform USB permissions.']
+    })
+  }
 }
 
 export function stopScrcpy(serial: string): OperationResult {

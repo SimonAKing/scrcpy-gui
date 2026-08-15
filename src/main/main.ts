@@ -10,6 +10,7 @@ import type {
   DeviceControlAction,
   DeviceLaunch,
   FileConflictPolicy,
+  LaunchConfig,
   ProfileImportStrategy,
   Locale,
   OperationResult,
@@ -30,6 +31,7 @@ import {
   pairDevice,
   runDeviceAutomation,
   startScrcpy,
+  startOtg,
   startDeviceTracker,
   stopAdbServer,
   stopAllScrcpy,
@@ -48,6 +50,7 @@ import {
   deviceLaunches,
   deviceSerial,
   deviceSerials,
+  launchConfig,
   nonNegativeInteger,
   runtimeConfig,
   strictBoolean
@@ -342,6 +345,12 @@ function availableDeviceSerial(value: unknown): string {
   return availableDeviceSerials([value])[0]
 }
 
+function optionalUsbSerial(value: unknown): string {
+  const serial = boundedString(value, 'OTG USB serial', 512, true).trim()
+  if (serial && !/^[A-Za-z0-9._:-]+$/.test(serial)) throw new TypeError('OTG USB serial contains unsupported characters.')
+  return serial
+}
+
 function availableDeviceSerials(value: unknown): string[] {
   const serials = deviceSerials(value)
   const available = new Set(listTrackedDevices().filter((device) => device.state === 'device').map((device) => device.serial))
@@ -523,7 +532,8 @@ handle('dialog:record', async () => {
     defaultPath: `scrcpy-${new Date().toISOString().replaceAll(':', '-').slice(0, 19)}.mp4`,
     filters: [
       { name: 'MP4 video', extensions: ['mp4'] },
-      { name: 'Matroska video', extensions: ['mkv'] }
+      { name: 'Matroska video', extensions: ['mkv'] },
+      { name: 'Audio recording', extensions: ['m4a', 'mka', 'opus', 'aac', 'flac', 'wav'] }
     ]
   })
   return result.canceled ? '' : result.filePath || ''
@@ -662,6 +672,29 @@ handle('scrcpy:preview', (_event, launches: unknown) => {
     }
   } catch (error) {
     return failureFromUnknown(error, 'COMMAND_PREVIEW_FAILED', 'command-preview', 'Unable to build the command preview.')
+  }
+})
+handle('scrcpy:start-otg', (_event, runtime: RuntimeConfig, launch: unknown, usbSerial: string) =>
+  startOtg(
+    runtimeConfig(runtime),
+    launchConfig(launch),
+    optionalUsbSerial(usbSerial)
+  )
+)
+handle('scrcpy:preview-otg', (_event, launch: unknown, usbSerial: string) => {
+  try {
+    const validated = launchConfig(launch)
+    if (validated.scene !== 'otg') throw new TypeError('OTG preview requires the OTG scene.')
+    const serial = optionalUsbSerial(usbSerial)
+    return {
+      ok: true,
+      data: {
+        serial: serial || 'otg:auto-usb',
+        ...buildScrcpyArgDetails(validated, serial)
+      }
+    }
+  } catch (error) {
+    return failureFromUnknown(error, 'OTG_PREVIEW_FAILED', 'otg-preview', 'Unable to preview OTG mode.')
   }
 })
 handle('session:list', () => listScrcpySessions())
