@@ -107,3 +107,5 @@ Research remains intentionally unimplemented until a prototype, cross-platform m
 4. Keep signing/notarization and manual interactive installer UX disclosed until separately exercised; neither is inferred from hosted-runner startup.
 
 The separate MIT v2.4.1 Draft (#190) also requires explicit consent for the migrated #69 Russian translation and confirmation that maintainer-authored work is free of employer/school/IP restrictions. It is not counted as an M0–M4 completion claim.
+
+Use the [physical hardware smoke runbook](HARDWARE_SMOKE_RUNBOOK.md) and `npm run smoke:hardware` to generate the redacted preflight report and execute the remaining scene checklist. A `blocked` preflight report is evidence that prerequisites are missing, not evidence that a scene passed.
