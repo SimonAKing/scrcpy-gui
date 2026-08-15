@@ -5,6 +5,7 @@
 ### Security
 
 - Validate every privileged IPC call against the main application frame and trusted renderer URL.
+- Validate and normalize privileged IPC payloads at runtime, with bounded paths, device batches, expert arguments, and automations.
 - Deny renderer permission requests, new windows, and navigation to untrusted locations.
 - Apply a production-only Content Security Policy that removes development localhost access and blocks object, base, and form targets.
 

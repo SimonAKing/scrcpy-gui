@@ -23,6 +23,15 @@ import {
   stopAllScrcpy,
   stopScrcpy
 } from './processes'
+import {
+  automationSteps,
+  boundedString,
+  controlAction,
+  deviceLaunches,
+  deviceSerial,
+  runtimeConfig,
+  strictBoolean
+} from './ipcValidation'
 import { isTrustedRendererUrl, PRODUCTION_CSP } from './security'
 
 let mainWindow: BrowserWindow | null = null
@@ -160,14 +169,14 @@ function setBossKey(enabled: boolean, accelerator: string): OperationResult<stri
 
 handle('app:version', () => app.getVersion())
 handle('app:minimize-to-tray', (_event, enabled: boolean) => {
-  minimizeToTray = Boolean(enabled)
+  minimizeToTray = strictBoolean(enabled, 'minimizeToTray')
 })
 handle('app:quit-behavior', (_event, runtime: RuntimeConfig, shouldKillAdb: boolean) => {
-  quitRuntime = { scrcpyPath: String(runtime?.scrcpyPath || '') }
-  killAdbOnQuit = Boolean(shouldKillAdb)
+  quitRuntime = runtimeConfig(runtime)
+  killAdbOnQuit = strictBoolean(shouldKillAdb, 'killAdbOnQuit')
 })
 handle('app:boss-key', (_event, enabled: boolean, accelerator: string) =>
-  setBossKey(Boolean(enabled), String(accelerator || ''))
+  setBossKey(strictBoolean(enabled, 'bossKeyEnabled'), boundedString(accelerator, 'bossKeyAccelerator', 128, true))
 )
 handle('dialog:scrcpy', async () => {
   const result = await dialog.showOpenDialog({
@@ -196,28 +205,36 @@ handle('dialog:record-directory', async () => {
   })
   return result.canceled ? '' : result.filePaths[0] || ''
 })
-handle('system:environment', (_event, runtime: RuntimeConfig) => getEnvironment(runtime))
-handle('device:list', (_event, runtime: RuntimeConfig) => listDevices(runtime))
-handle('device:connect', (_event, runtime: RuntimeConfig, target: string) => connectDevice(runtime, target))
+handle('system:environment', (_event, runtime: RuntimeConfig) => getEnvironment(runtimeConfig(runtime)))
+handle('device:list', (_event, runtime: RuntimeConfig) => listDevices(runtimeConfig(runtime)))
+handle('device:connect', (_event, runtime: RuntimeConfig, target: string) =>
+  connectDevice(runtimeConfig(runtime), boundedString(target, 'wireless target', 512))
+)
 handle('device:pair', (_event, runtime: RuntimeConfig, target: string, code: string) =>
-  pairDevice(runtime, target, code)
+  pairDevice(
+    runtimeConfig(runtime),
+    boundedString(target, 'pairing target', 512),
+    boundedString(code, 'pairing code', 6)
+  )
 )
 handle('device:disconnect', (_event, runtime: RuntimeConfig, target: string) =>
-  disconnectDevice(runtime, target)
+  disconnectDevice(runtimeConfig(runtime), boundedString(target, 'wireless target', 512))
 )
 handle(
   'scrcpy:start',
   (_event, runtime: RuntimeConfig, launches: DeviceLaunch[]) =>
-    startScrcpy(runtime, launches, sendStatus)
+    startScrcpy(runtimeConfig(runtime), deviceLaunches(launches), sendStatus)
 )
-handle('scrcpy:stop', (_event, serial: string) => stopScrcpy(serial))
+handle('scrcpy:stop', (_event, serial: string) => stopScrcpy(deviceSerial(serial)))
 handle(
   'device:control',
   (_event, runtime: RuntimeConfig, serial: string, action: DeviceControlAction) =>
-    controlDevice(runtime, serial, action)
+    controlDevice(runtimeConfig(runtime), deviceSerial(serial), controlAction(action))
 )
 handle('device:screenshot', async (_event, runtime: RuntimeConfig, serial: string) => {
-  const safeSerial = serial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
+  const validatedRuntime = runtimeConfig(runtime)
+  const validatedSerial = deviceSerial(serial)
+  const safeSerial = validatedSerial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
   const timestamp = new Date().toISOString().replaceAll(':', '-').slice(0, 19)
   const result = await dialog.showSaveDialog({
     title: 'Save device screenshot',
@@ -225,15 +242,15 @@ handle('device:screenshot', async (_event, runtime: RuntimeConfig, serial: strin
     filters: [{ name: 'PNG image', extensions: ['png'] }]
   })
   if (result.canceled || !result.filePath) return { ok: false, error: 'Screenshot canceled.' }
-  return captureDeviceScreenshot(runtime, serial, result.filePath)
+  return captureDeviceScreenshot(validatedRuntime, validatedSerial, result.filePath)
 })
 handle(
   'device:automation',
   (_event, runtime: RuntimeConfig, serial: string, steps: AutomationStep[]) =>
-    runDeviceAutomation(runtime, serial, steps)
+    runDeviceAutomation(runtimeConfig(runtime), deviceSerial(serial), automationSteps(steps))
 )
 handle('shell:open', async (_event, rawUrl: string) => {
-  const url = new URL(rawUrl)
+  const url = new URL(boundedString(rawUrl, 'external URL', 2048))
   const allowedHosts = new Set(['github.com', 'scrcpyapp.org'])
   if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname)) throw new Error('External URL is not allowed.')
   await shell.openExternal(url.toString())
