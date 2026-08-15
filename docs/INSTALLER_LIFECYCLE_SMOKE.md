@@ -12,6 +12,8 @@ The `Installer lifecycle smoke` workflow validates real GitHub Release assets ra
 
 The current release asset must match its published `SHA256SUMS.txt` entry before installation. Version inputs are syntax-validated and downloads are restricted to this repository's releases.
 
+Linux comparisons use the `Version` field embedded in each Debian package. This is intentionally not compared directly with the Git tag because Debian encodes prerelease ordering with `~` (for example, tag `2.0.0-beta.6` becomes package version `2.0.0~beta.6`).
+
 ## Evidence and limits
 
 This workflow proves that representative native installer formats can install, upgrade, expose the expected bundled scrcpy/ADB runtime, and uninstall on clean hosted runners. It does not prove code-signing reputation, Apple notarization, interactive installer wording, retained user preferences, every Linux package format, physical Android behavior, or Chocolatey Community availability.
