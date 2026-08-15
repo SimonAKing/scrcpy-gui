@@ -5,6 +5,7 @@ import type {
   DeviceLaunch,
   RuntimeConfig,
   ScrcpyApi,
+  ScrcpySessionEvent,
   ScrcpyStatusEvent
 } from '../shared/types'
 
@@ -21,6 +22,8 @@ const api: ScrcpyApi = {
   start: (runtime: RuntimeConfig, launches: DeviceLaunch[]) =>
     ipcRenderer.invoke('scrcpy:start', runtime, launches),
   preview: (launches: DeviceLaunch[]) => ipcRenderer.invoke('scrcpy:preview', launches),
+  listSessions: () => ipcRenderer.invoke('session:list'),
+  stopSession: (id: string) => ipcRenderer.invoke('session:stop', id),
   stop: (serial: string) => ipcRenderer.invoke('scrcpy:stop', serial),
   control: (runtime: RuntimeConfig, serial: string, action: DeviceControlAction) =>
     ipcRenderer.invoke('device:control', runtime, serial, action),
@@ -38,6 +41,11 @@ const api: ScrcpyApi = {
     const listener = (_event: Electron.IpcRendererEvent, status: ScrcpyStatusEvent): void => callback(status)
     ipcRenderer.on('scrcpy:status', listener)
     return () => ipcRenderer.removeListener('scrcpy:status', listener)
+  },
+  onSession: (callback: (event: ScrcpySessionEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, sessionEvent: ScrcpySessionEvent): void => callback(sessionEvent)
+    ipcRenderer.on('session:event', listener)
+    return () => ipcRenderer.removeListener('session:event', listener)
   }
 }
 

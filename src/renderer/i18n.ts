@@ -8,6 +8,12 @@ const en: Record<string, string> = {
   settingsSection_general: 'General', settingsSection_video: 'Video', settingsSection_controls: 'Controls',
   settingsSection_recording: 'Recording', settingsSection_geometry: 'Window', settingsSection_advanced: 'Advanced',
   logs: 'Logs',
+  sessions: 'Sessions', sessionCenter: 'Session center',
+  sessionsHint: 'Every launch has its own identity and verified lifecycle; a spawned process is not reported as running until it survives the startup window.',
+  noSessions: 'No scrcpy sessions have been launched in this app run.', stopAllSessions: 'Stop all active',
+  sessionsStopFailed: 'sessions could not be stopped.',
+  sessionState_queued: 'Queued', sessionState_preflighting: 'Preflight', sessionState_launching: 'Launching',
+  sessionState_running: 'Running', sessionState_stopping: 'Stopping', sessionState_stopped: 'Stopped', sessionState_failed: 'Failed',
   runtimeSetup: 'Runtime setup',
   runtimeHint: 'Bundled scrcpy 4.1 and adb are ready to use.',
   chooseScrcpy: 'Choose scrcpy',
@@ -117,7 +123,11 @@ const en: Record<string, string> = {
 }
 
 const zhCN: Record<string, string> = {
-  devices: '设备', settings: '设置', logs: '日志', settingsSection_general: '常规', settingsSection_video: '视频',
+  devices: '设备', sessions: '会话', settings: '设置', logs: '日志', settingsSection_general: '常规', settingsSection_video: '视频',
+  sessionCenter: '会话中心', sessionsHint: '每次启动都有独立身份和经过验证的生命周期；进程只有通过启动观察窗口后才会显示为运行中。',
+  noSessions: '本次运行尚未启动 scrcpy 会话。', stopAllSessions: '停止全部活动会话', sessionsStopFailed: '个会话无法停止。',
+  sessionState_queued: '排队中', sessionState_preflighting: '预检中', sessionState_launching: '启动中',
+  sessionState_running: '运行中', sessionState_stopping: '停止中', sessionState_stopped: '已停止', sessionState_failed: '失败',
   settingsSection_controls: '控制', settingsSection_recording: '录制', settingsSection_geometry: '窗口', settingsSection_advanced: '高级', runtimeSetup: '运行环境',
   runtimeHint: '已内置 scrcpy 4.1 与 adb，可以直接使用。', chooseScrcpy: '选择其他 scrcpy',
   recheck: '重新检测', ready: '可用', notFound: '未找到', refresh: '刷新', connectedDevices: '已连接设备',
@@ -168,7 +178,11 @@ const zhCN: Record<string, string> = {
 
 const zhTW: Record<string, string> = {
   ...zhCN,
-  devices: '裝置', settings: '設定', logs: '日誌', runtimeSetup: '執行環境',
+  devices: '裝置', sessions: '工作階段', settings: '設定', logs: '日誌', runtimeSetup: '執行環境',
+  sessionCenter: '工作階段中心', sessionsHint: '每次啟動都有獨立身分與經驗證的生命週期；程序通過啟動觀察視窗後才會顯示為執行中。',
+  noSessions: '本次執行尚未啟動 scrcpy 工作階段。', stopAllSessions: '停止全部作用中工作階段', sessionsStopFailed: '個工作階段無法停止。',
+  sessionState_queued: '排隊中', sessionState_preflighting: '預檢中', sessionState_launching: '啟動中',
+  sessionState_running: '執行中', sessionState_stopping: '停止中', sessionState_stopped: '已停止', sessionState_failed: '失敗',
   runtimeHint: '已內建 scrcpy 4.1 與 adb，可以直接使用。', chooseScrcpy: '選擇其他 scrcpy',
   recheck: '重新偵測', ready: '可用', notFound: '未找到', refresh: '重新整理', connectedDevices: '已連接裝置',
   noDevices: '未偵測到裝置。請連接 USB 偵錯，或在下方使用無線配對。', launchSelected: '開啟所選裝置', stop: '停止',
@@ -186,7 +200,11 @@ const zhTW: Record<string, string> = {
 }
 
 const ru: Record<string, string> = {
-  devices: 'Устройства', settings: 'Настройки', logs: 'Журнал', runtimeSetup: 'Среда выполнения',
+  devices: 'Устройства', sessions: 'Сеансы', settings: 'Настройки', logs: 'Журнал', runtimeSetup: 'Среда выполнения',
+  sessionCenter: 'Центр сеансов', sessionsHint: 'Каждый запуск имеет отдельный идентификатор и проверяемый жизненный цикл.',
+  noSessions: 'В этом запуске приложения ещё не было сеансов scrcpy.', stopAllSessions: 'Остановить активные', sessionsStopFailed: 'сеансов не удалось остановить.',
+  sessionState_queued: 'В очереди', sessionState_preflighting: 'Проверка', sessionState_launching: 'Запуск',
+  sessionState_running: 'Работает', sessionState_stopping: 'Остановка', sessionState_stopped: 'Остановлен', sessionState_failed: 'Ошибка',
   runtimeHint: 'Встроенные scrcpy 4.1 и adb готовы к работе.',
   chooseScrcpy: 'Выбрать scrcpy', recheck: 'Проверить', ready: 'Готово', notFound: 'Не найдено', refresh: 'Обновить',
   connectedDevices: 'Подключённые устройства', noDevices: 'Устройства не найдены. Подключите USB-отладку или используйте беспроводное сопряжение ниже.',

@@ -1,4 +1,4 @@
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { constants as fsConstants, existsSync, statSync } from 'node:fs'
 import { access, writeFile } from 'node:fs/promises'
 import { delimiter, dirname, join } from 'node:path'
@@ -11,18 +11,19 @@ import type {
   EnvironmentStatus,
   OperationResult,
   RuntimeConfig,
-  ScrcpyStatusEvent
+  ScrcpySession,
+  ScrcpySessionEvent,
+  SessionStopReason
 } from '../shared/types'
 import { buildScrcpyArgs, isSupportedScrcpyVersion, parseAdbDevices, validateDeviceAddress } from './scrcpy'
-
-type StatusEmitter = (event: ScrcpyStatusEvent) => void
+import { ScrcpySessionManager } from './sessionManager'
 
 interface CommandOutput {
   stdout: string
   stderr: string
 }
 
-const activeProcesses = new Map<string, ChildProcessWithoutNullStreams>()
+const sessionManager = new ScrcpySessionManager()
 const CONTROL_KEYCODES: Partial<Record<DeviceControlAction, string>> = {
   back: 'KEYCODE_BACK',
   home: 'KEYCODE_HOME',
@@ -374,14 +375,17 @@ export async function runDeviceAutomation(
   return { ok: true, data: `Replayed ${steps.length} actions on ${serial}.` }
 }
 
-function emitMessage(emit: StatusEmitter, serial: string, status: ScrcpyStatusEvent['status'], message: string): void {
-  emit({ serial, status, message, timestamp: new Date().toISOString() })
+export function subscribeScrcpySessionEvents(listener: (event: ScrcpySessionEvent) => void): () => void {
+  return sessionManager.subscribe(listener)
+}
+
+export function listScrcpySessions(): ScrcpySession[] {
+  return sessionManager.list()
 }
 
 export async function startScrcpy(
   runtime: RuntimeConfig,
-  launches: DeviceLaunch[],
-  emit: StatusEmitter
+  launches: DeviceLaunch[]
 ): Promise<OperationResult<string[]>> {
   const scrcpyPath = await resolveBinary(runtime, 'scrcpy')
   if (!scrcpyPath) return { ok: false, error: 'scrcpy executable not found.' }
@@ -401,11 +405,6 @@ export async function startScrcpy(
 
   const started: string[] = []
   for (const { serial, launch } of uniqueLaunches) {
-    if (activeProcesses.has(serial)) {
-      emitMessage(emit, serial, 'error', 'scrcpy is already running for this device.')
-      continue
-    }
-
     let args: string[]
     try {
       let effectiveLaunch = launch
@@ -423,43 +422,8 @@ export async function startScrcpy(
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
 
-    const child = spawn(scrcpyPath, args, {
-      windowsHide: true,
-      env: { ...process.env, LANG: 'en_US.UTF-8' }
-    })
-    activeProcesses.set(serial, child)
-    started.push(serial)
-    emitMessage(emit, serial, 'starting', `${scrcpyPath} ${args.join(' ')}`)
-
-    let recentError = ''
-    child.stdout.on('data', (chunk: Buffer) => {
-      const message = chunk.toString().trim()
-      if (message) emitMessage(emit, serial, 'log', message)
-    })
-    child.stderr.on('data', (chunk: Buffer) => {
-      const message = chunk.toString().trim()
-      if (!message) return
-      recentError = `${recentError}\n${message}`.trim().slice(-4000)
-      emitMessage(emit, serial, 'log', message)
-    })
-    child.on('error', (error) => {
-      activeProcesses.delete(serial)
-      emitMessage(emit, serial, 'error', error.message)
-    })
-    child.on('close', (code, signal) => {
-      activeProcesses.delete(serial)
-      if (code === 0 || signal === 'SIGTERM') {
-        emitMessage(emit, serial, 'stopped', 'scrcpy stopped.')
-      } else {
-        emitMessage(emit, serial, 'error', recentError || `scrcpy exited with code ${code ?? 'unknown'}.`)
-      }
-    })
-
-    setTimeout(() => {
-      if (activeProcesses.get(serial) === child && child.exitCode === null) {
-        emitMessage(emit, serial, 'running', 'scrcpy is running.')
-      }
-    }, 1_200)
+    const session = sessionManager.launch({ executable: scrcpyPath, serial, scene: 'screen', args })
+    if (session.state !== 'failed') started.push(serial)
   }
 
   return started.length > 0
@@ -468,13 +432,13 @@ export async function startScrcpy(
 }
 
 export function stopScrcpy(serial: string): OperationResult {
-  const child = activeProcesses.get(serial)
-  if (!child) return { ok: false, error: 'No running scrcpy process found for this device.' }
-  child.kill()
-  return { ok: true }
+  return sessionManager.stopBySerial(serial)
 }
 
-export function stopAllScrcpy(): void {
-  for (const child of activeProcesses.values()) child.kill()
-  activeProcesses.clear()
+export function stopScrcpySession(id: string): OperationResult {
+  return sessionManager.stop(id)
+}
+
+export function stopAllScrcpy(reason: SessionStopReason = 'app-quit'): void {
+  sessionManager.stopAll(reason)
 }

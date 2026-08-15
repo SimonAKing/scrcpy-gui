@@ -5,6 +5,8 @@
 ### Added
 
 - Preview the exact validated argv generated for each selected device before launch.
+- Track every scrcpy launch as an independent session with an explicit startup lifecycle, PID, command, stop reason, and Sessions page.
+- Cover long-running, early-exit, normal-exit, duplicate, missing-binary, and stop behavior with controlled child-process integration tests.
 
 ### Security
 

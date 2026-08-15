@@ -7,6 +7,7 @@ import type {
   DeviceLaunch,
   OperationResult,
   RuntimeConfig,
+  ScrcpySessionEvent,
   ScrcpyStatusEvent
 } from '../shared/types'
 import {
@@ -16,12 +17,15 @@ import {
   disconnectDevice,
   getEnvironment,
   listDevices,
+  listScrcpySessions,
   pairDevice,
   runDeviceAutomation,
   startScrcpy,
   stopAdbServer,
   stopAllScrcpy,
-  stopScrcpy
+  stopScrcpy,
+  stopScrcpySession,
+  subscribeScrcpySessionEvents
 } from './processes'
 import {
   automationSteps,
@@ -83,6 +87,25 @@ function configureSessionSecurity(): void {
 function sendStatus(status: ScrcpyStatusEvent): void {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('scrcpy:status', status)
 }
+
+function sendSessionEvent(event: ScrcpySessionEvent): void {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('session:event', event)
+  const status: ScrcpyStatusEvent['status'] =
+    event.type === 'output' ? 'log'
+      : event.session.state === 'launching' ? 'starting'
+      : event.session.state === 'running' ? 'running'
+        : event.session.state === 'stopped' ? 'stopped'
+          : event.session.state === 'failed' ? 'error'
+            : 'log'
+  sendStatus({
+    serial: event.session.serialAtLaunch,
+    status,
+    message: event.message,
+    timestamp: event.timestamp
+  })
+}
+
+subscribeScrcpySessionEvents(sendSessionEvent)
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -157,7 +180,7 @@ function setBossKey(enabled: boolean, accelerator: string): OperationResult<stri
   if (!shortcut) return { ok: false, error: 'Enter a boss key shortcut.' }
   try {
     const registered = globalShortcut.register(shortcut, () => {
-      stopAllScrcpy()
+      stopAllScrcpy('boss-key')
       mainWindow?.hide()
     })
     if (!registered) return { ok: false, error: `The shortcut ${shortcut} is already in use.` }
@@ -224,7 +247,7 @@ handle('device:disconnect', (_event, runtime: RuntimeConfig, target: string) =>
 handle(
   'scrcpy:start',
   (_event, runtime: RuntimeConfig, launches: DeviceLaunch[]) =>
-    startScrcpy(runtimeConfig(runtime), deviceLaunches(launches), sendStatus)
+    startScrcpy(runtimeConfig(runtime), deviceLaunches(launches))
 )
 handle('scrcpy:preview', (_event, launches: DeviceLaunch[]) => {
   try {
@@ -236,6 +259,8 @@ handle('scrcpy:preview', (_event, launches: DeviceLaunch[]) => {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
 })
+handle('session:list', () => listScrcpySessions())
+handle('session:stop', (_event, id: string) => stopScrcpySession(boundedString(id, 'session id', 128)))
 handle('scrcpy:stop', (_event, serial: string) => stopScrcpy(deviceSerial(serial)))
 handle(
   'device:control',

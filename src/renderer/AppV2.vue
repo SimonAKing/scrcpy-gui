@@ -10,12 +10,14 @@ import type {
   LaunchConfig,
   LaunchProfile,
   PersistedConfig,
+  ScrcpySession,
+  ScrcpySessionEvent,
   ScrcpyStatusEvent,
   WirelessTarget
 } from '../shared/types'
 import { translate } from './i18n'
 
-type Tab = 'devices' | 'settings' | 'logs'
+type Tab = 'devices' | 'sessions' | 'settings' | 'logs'
 type SettingsSection = 'general' | 'video' | 'controls' | 'recording' | 'geometry' | 'advanced'
 type ToastKind = 'success' | 'error' | 'info'
 
@@ -128,7 +130,8 @@ const environment = ref<EnvironmentStatus | null>(null)
 const devices = ref<Device[]>([])
 const selectedSerials = ref<string[]>([])
 const commandPreviews = ref<CommandPreview[]>([])
-const runningSerials = ref(new Set<string>())
+const sessions = ref<ScrcpySession[]>([])
+const activeSerials = ref(new Set<string>())
 const loadingEnvironment = ref(false)
 const loadingDevices = ref(false)
 const wirelessTarget = ref(config.wirelessTargets[0]?.address || '')
@@ -145,6 +148,7 @@ const toasts = ref<Toast[]>([])
 let toastId = 0
 let pollTimer: number | undefined
 let removeStatusListener: (() => void) | undefined
+let removeSessionListener: (() => void) | undefined
 let lastRecordedActionAt = 0
 const autoLaunchAttempted = new Set<string>()
 
@@ -252,7 +256,7 @@ async function refreshDevices(notifyError = false): Promise<void> {
   }
   if (environment.value?.scrcpy.ok) {
     for (const device of devices.value.filter((item) => item.state === 'device' && config.autoLaunchDevices[item.serial])) {
-      if (autoLaunchAttempted.has(device.serial) || runningSerials.value.has(device.serial)) continue
+      if (autoLaunchAttempted.has(device.serial) || activeSerials.value.has(device.serial)) continue
       autoLaunchAttempted.add(device.serial)
       const startResult = await window.scrcpy.start(runtimeSnapshot(), [{ serial: device.serial, launch: launchSnapshot(device.serial) }])
       if (!startResult.ok) toast('error', startResult.error || t('operationFailed'))
@@ -487,17 +491,52 @@ function openGithub(): void {
 function handleStatus(event: ScrcpyStatusEvent): void {
   logs.value.push(event)
   if (logs.value.length > 500) logs.value.shift()
-  const next = new Set(runningSerials.value)
-  if (event.status === 'starting' || event.status === 'running') next.add(event.serial)
-  if (event.status === 'stopped' || event.status === 'error') next.delete(event.serial)
-  runningSerials.value = next
   if (event.status === 'running') toast('success', `${event.serial}: ${t('launched')}`)
   if (event.status === 'stopped') toast('info', `${event.serial}: ${t('stopped')}`)
   if (event.status === 'error') toast('error', `${event.serial}: ${event.message}`)
 }
 
+function sessionIsActive(session: ScrcpySession): boolean {
+  return ['queued', 'preflighting', 'launching', 'running', 'stopping'].includes(session.state)
+}
+
+function syncActiveSerials(): void {
+  activeSerials.value = new Set(sessions.value.filter(sessionIsActive).map((session) => session.serialAtLaunch))
+}
+
+function handleSession(event: ScrcpySessionEvent): void {
+  const index = sessions.value.findIndex((session) => session.id === event.session.id)
+  if (index >= 0) sessions.value[index] = event.session
+  else sessions.value.unshift(event.session)
+  syncActiveSerials()
+}
+
+async function stopSession(id: string): Promise<void> {
+  const result = await window.scrcpy.stopSession(id)
+  if (!result.ok) toast('error', result.error || t('operationFailed'))
+}
+
+async function stopAllSessions(): Promise<void> {
+  const results = await Promise.all(sessions.value.filter(sessionIsActive).map((session) => window.scrcpy.stopSession(session.id)))
+  const failed = results.filter((result) => !result.ok)
+  if (failed.length) toast('error', `${failed.length} ${t('sessionsStopFailed')}`)
+}
+
+function sessionDeviceLabel(session: ScrcpySession): string {
+  return config.deviceAliases[session.serialAtLaunch]?.trim() || session.serialAtLaunch
+}
+
+function sessionArgv(session: ScrcpySession): string {
+  return JSON.stringify(['scrcpy', ...session.args])
+}
+
+function deviceSessionState(serial: string): ScrcpySession['state'] | undefined {
+  return sessions.value.find((session) => session.serialAtLaunch === serial && sessionIsActive(session))?.state
+}
+
 function statusLabel(device: Device): string {
-  if (runningSerials.value.has(device.serial)) return t('running')
+  const sessionState = deviceSessionState(device.serial)
+  if (sessionState) return t(`sessionState_${sessionState}`)
   if (device.state === 'device') return device.connection === 'usb' ? t('usb') : t('wireless')
   if (device.state === 'offline') return t('offline')
   return device.state
@@ -506,6 +545,11 @@ function statusLabel(device: Device): string {
 onMounted(async () => {
   version.value = await window.scrcpy.getVersion()
   removeStatusListener = window.scrcpy.onStatus(handleStatus)
+  removeSessionListener = window.scrcpy.onSession(handleSession)
+  const listedSessions = await window.scrcpy.listSessions()
+  const liveIds = new Set(sessions.value.map((session) => session.id))
+  sessions.value.push(...listedSessions.filter((session) => !liveIds.has(session.id)))
+  syncActiveSerials()
   await window.scrcpy.setMinimizeToTray(config.minimizeToTray)
   await window.scrcpy.setQuitBehavior(runtimeSnapshot(), config.killAdbOnQuit)
   await applyBossKey()
@@ -522,6 +566,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (pollTimer) window.clearInterval(pollTimer)
   removeStatusListener?.()
+  removeSessionListener?.()
 })
 </script>
 
@@ -533,9 +578,10 @@ onBeforeUnmount(() => {
         <span><strong>Scrcpy GUI</strong><small>v{{ version }}</small></span>
       </button>
       <nav class="tabs" aria-label="Main navigation">
-        <button v-for="tab in (['devices', 'settings', 'logs'] as Tab[])" :key="tab" :class="{ active: activeTab === tab }" @click="activeTab = tab">
+        <button v-for="tab in (['devices', 'sessions', 'settings', 'logs'] as Tab[])" :key="tab" :class="{ active: activeTab === tab }" @click="activeTab = tab">
           {{ t(tab) }}
           <span v-if="tab === 'logs' && logs.length" class="count">{{ logs.length }}</span>
+          <span v-else-if="tab === 'sessions' && sessions.filter(sessionIsActive).length" class="count">{{ sessions.filter(sessionIsActive).length }}</span>
         </button>
       </nav>
       <div class="top-actions">
@@ -592,9 +638,9 @@ onBeforeUnmount(() => {
             </div>
             <label class="device-auto"><input v-model="config.autoLaunchDevices[device.serial]" type="checkbox" /><span>{{ t('autoLaunchDevice') }}</span></label>
             <div class="device-footer">
-              <span :class="['status-dot', device.state, { running: runningSerials.has(device.serial) }]">{{ statusLabel(device) }}</span>
+              <span :class="['status-dot', device.state, deviceSessionState(device.serial)]">{{ statusLabel(device) }}</span>
               <div class="button-row nowrap">
-                <button v-if="runningSerials.has(device.serial)" class="danger compact" @click="stop(device.serial)">{{ t('stop') }}</button>
+                <button v-if="activeSerials.has(device.serial)" class="danger compact" @click="stop(device.serial)">{{ t('stop') }}</button>
                 <button v-if="device.connection === 'wireless'" class="ghost compact" @click="disconnect(device.serial)">{{ t('disconnect') }}</button>
               </div>
             </div>
@@ -663,6 +709,26 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </section>
+      </template>
+
+      <template v-else-if="activeTab === 'sessions'">
+        <section class="sessions-header">
+          <div><p class="eyebrow">{{ t('sessionCenter') }}</p><h1>{{ t('sessions') }}</h1><p class="muted">{{ t('sessionsHint') }}</p></div>
+          <button class="danger" :disabled="!sessions.some(sessionIsActive)" @click="stopAllSessions">{{ t('stopAllSessions') }}</button>
+        </section>
+        <section v-if="sessions.length" class="session-list">
+          <article v-for="session in sessions" :key="session.id" class="panel session-card">
+            <div class="session-summary">
+              <span :class="['session-state', session.state]">{{ t(`sessionState_${session.state}`) }}</span>
+              <div class="session-device"><strong>{{ sessionDeviceLabel(session) }}</strong><code>{{ session.serialAtLaunch }} · {{ session.scene }}</code></div>
+              <div class="session-meta"><span>{{ new Date(session.createdAt).toLocaleString() }}</span><code v-if="session.pid">PID {{ session.pid }}</code></div>
+              <button v-if="sessionIsActive(session)" class="danger compact" :disabled="session.state === 'stopping'" @click="stopSession(session.id)">{{ t('stop') }}</button>
+            </div>
+            <code class="session-command">{{ sessionArgv(session) }}</code>
+            <p v-if="session.error" class="session-error">{{ session.error }}</p>
+          </article>
+        </section>
+        <section v-else class="empty-state"><span class="empty-icon">◷</span><p>{{ t('noSessions') }}</p></section>
       </template>
 
       <template v-else-if="activeTab === 'settings'">
@@ -746,7 +812,7 @@ onBeforeUnmount(() => {
         </div>
       </template>
 
-      <template v-else>
+      <template v-else-if="activeTab === 'logs'">
         <section class="logs-header"><div><p class="eyebrow">{{ t('logs') }}</p><h1>scrcpy stdout / stderr</h1></div><button class="ghost" @click="logs = []">{{ t('clearLogs') }}</button></section>
         <section class="terminal"><p v-if="!logs.length" class="muted">{{ t('noLogs') }}</p><div v-for="(entry, index) in logs" :key="`${entry.timestamp}-${index}`" :class="['log-line', entry.status]"><time>{{ new Date(entry.timestamp).toLocaleTimeString() }}</time><code>[{{ entry.serial }}] {{ entry.message }}</code></div></section>
       </template>
