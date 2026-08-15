@@ -7,6 +7,8 @@ import type {
   AppEventDomain,
   AppEventLevel,
   ApkInstallResult,
+  ArtifactKind,
+  ArtifactRecord,
   BatchItemResult,
   BatchProgressEvent,
   CapabilitySnapshot,
@@ -32,7 +34,7 @@ import { defaultPersistedConfig, legacyConfigView } from '../shared/config'
 import { operationErrorMessage } from '../shared/errors'
 import { translate } from './i18n'
 
-type Tab = 'devices' | 'sessions' | 'settings' | 'logs'
+type Tab = 'devices' | 'sessions' | 'artifacts' | 'settings' | 'logs'
 type SettingsSection = 'general' | 'video' | 'controls' | 'recording' | 'geometry' | 'advanced'
 type WorkspaceSection = 'overview' | 'control' | 'apps' | 'files'
 type ToastKind = 'success' | 'error' | 'info'
@@ -86,6 +88,10 @@ const devices = ref<Device[]>([])
 const selectedSerials = ref<string[]>([])
 const commandPreviews = ref<CommandPreview[]>([])
 const sessions = ref<ScrcpySession[]>([])
+const artifacts = ref<ArtifactRecord[]>([])
+const artifactKind = ref<ArtifactKind | 'all'>('all')
+const artifactDevice = ref('all')
+const loadingArtifacts = ref(false)
 const activeSerials = ref(new Set<string>())
 const loadingEnvironment = ref(false)
 const loadingDevices = ref(false)
@@ -166,6 +172,12 @@ const visibleLogs = computed(() => logs.value.filter((event) =>
   (logLevel.value === 'all' || event.level === logLevel.value) &&
   (logDomain.value === 'all' || event.domain === logDomain.value)
 ))
+const visibleArtifacts = computed(() => artifacts.value.filter((artifact) =>
+  (artifactKind.value === 'all' || artifact.kind === artifactKind.value) &&
+  (artifactDevice.value === 'all' || artifact.deviceId === artifactDevice.value)
+))
+const artifactKinds: ArtifactKind[] = ['screenshot', 'recording', 'transfer-report', 'diagnostic']
+const artifactDevices = computed(() => [...new Set(artifacts.value.map((artifact) => artifact.deviceId).filter(Boolean) as string[])])
 const eventLevels: AppEventLevel[] = ['debug', 'info', 'warn', 'error']
 const eventDomains: AppEventDomain[] = ['runtime', 'device', 'session', 'config', 'automation', 'artifact', 'update']
 
@@ -235,6 +247,10 @@ watch(controlSerial, () => {
   installedApps.value = []
   workspaceResults.value = []
   if (controlSerial.value) void loadDeviceOverview()
+})
+
+watch(activeTab, (tab) => {
+  if (tab === 'artifacts') void loadArtifacts()
 })
 
 function toast(kind: ToastKind, message: string): void {
@@ -512,6 +528,47 @@ function formatBytes(size: number): string {
   return `${(size / (1_024 * 1_024)).toFixed(1)} MiB`
 }
 
+async function loadArtifacts(): Promise<void> {
+  if (loadingArtifacts.value) return
+  loadingArtifacts.value = true
+  const result = await window.scrcpy.listArtifacts({ limit: 5_000 })
+  loadingArtifacts.value = false
+  if (result.ok) artifacts.value = result.data || []
+  else toast('error', operationErrorMessage(result, t('artifactListFailed')))
+}
+
+function artifactDeviceLabel(artifact: ArtifactRecord): string {
+  if (!artifact.deviceId) return t('notApplicable')
+  return config.deviceAliases[artifact.deviceId]?.trim() || artifact.deviceId
+}
+
+async function openArtifact(artifact: ArtifactRecord): Promise<void> {
+  const result = await window.scrcpy.openArtifact(artifact.id)
+  if (!result.ok) toast('error', operationErrorMessage(result, t('artifactOpenFailed')))
+}
+
+async function revealArtifact(artifact: ArtifactRecord): Promise<void> {
+  const result = await window.scrcpy.revealArtifact(artifact.id)
+  if (!result.ok) toast('error', operationErrorMessage(result, t('artifactRevealFailed')))
+}
+
+async function copyArtifactPath(artifact: ArtifactRecord): Promise<void> {
+  const result = await window.scrcpy.copyArtifactPath(artifact.id)
+  if (result.ok) toast('success', t('artifactPathCopied'))
+  else toast('error', operationErrorMessage(result, t('artifactCopyFailed')))
+}
+
+async function deleteArtifact(artifact: ArtifactRecord, deleteFile: boolean): Promise<void> {
+  const result = await window.scrcpy.deleteArtifact(artifact.id, deleteFile)
+  if (!result.ok) {
+    if (result.error?.code === 'ARTIFACT_DELETE_CANCELED') return
+    toast('error', operationErrorMessage(result, t('artifactDeleteFailed')))
+    return
+  }
+  artifacts.value = artifacts.value.filter((item) => item.id !== artifact.id)
+  toast('success', deleteFile ? t('artifactFileDeleted') : t('artifactIndexDeleted'))
+}
+
 async function chooseRecordPath(): Promise<void> {
   const path = await window.scrcpy.chooseRecordPath()
   if (path) config.launch.recordPath = path
@@ -784,7 +841,7 @@ onBeforeUnmount(() => {
         <span><strong>Scrcpy GUI</strong><small>v{{ version }}</small></span>
       </button>
       <nav class="tabs" aria-label="Main navigation">
-        <button v-for="tab in (['devices', 'sessions', 'settings', 'logs'] as Tab[])" :key="tab" :class="{ active: activeTab === tab }" @click="activeTab = tab">
+        <button v-for="tab in (['devices', 'sessions', 'artifacts', 'settings', 'logs'] as Tab[])" :key="tab" :class="{ active: activeTab === tab }" @click="activeTab = tab">
           {{ t(tab) }}
           <span v-if="tab === 'logs' && logs.length" class="count">{{ logs.length }}</span>
           <span v-else-if="tab === 'sessions' && sessions.filter(sessionIsActive).length" class="count">{{ sessions.filter(sessionIsActive).length }}</span>
@@ -1016,6 +1073,35 @@ onBeforeUnmount(() => {
           </article>
         </section>
         <section v-else class="empty-state"><span class="empty-icon">◷</span><p>{{ t('noSessions') }}</p></section>
+      </template>
+
+      <template v-else-if="activeTab === 'artifacts'">
+        <section class="artifacts-header">
+          <div><p class="eyebrow">{{ t('artifactLibrary') }}</p><h1>{{ t('artifacts') }}</h1><p class="muted">{{ t('artifactsHint') }}</p></div>
+          <div class="artifact-filters">
+            <select v-model="artifactKind" :aria-label="t('filterArtifactKind')"><option value="all">{{ t('allArtifactKinds') }}</option><option v-for="kind in artifactKinds" :key="kind" :value="kind">{{ t(`artifactKind_${kind}`) }}</option></select>
+            <select v-model="artifactDevice" :aria-label="t('filterArtifactDevice')"><option value="all">{{ t('allDevices') }}</option><option v-for="serial in artifactDevices" :key="serial" :value="serial">{{ config.deviceAliases[serial] || serial }}</option></select>
+            <button class="ghost" :disabled="loadingArtifacts" @click="loadArtifacts">{{ t('refresh') }}</button>
+          </div>
+        </section>
+        <section v-if="visibleArtifacts.length" class="artifact-list">
+          <article v-for="artifact in visibleArtifacts" :key="artifact.id" class="panel artifact-card">
+            <div class="artifact-icon">{{ artifact.kind === 'screenshot' ? '▧' : artifact.kind === 'recording' ? '▶' : artifact.kind === 'diagnostic' ? '⌁' : '⇄' }}</div>
+            <div class="artifact-copy">
+              <div class="artifact-title"><strong>{{ artifact.name }}</strong><span :class="['artifact-status', artifact.status]">{{ t(`artifactStatus_${artifact.status}`) }}</span></div>
+              <code>{{ artifact.path }}</code>
+              <small>{{ t(`artifactKind_${artifact.kind}`) }} · {{ artifactDeviceLabel(artifact) }} · {{ new Date(artifact.createdAt).toLocaleString() }} · {{ formatBytes(artifact.size) }}</small>
+            </div>
+            <div class="artifact-actions">
+              <button class="secondary compact" :disabled="artifact.status === 'missing'" @click="openArtifact(artifact)">{{ t('open') }}</button>
+              <button class="ghost compact" :disabled="artifact.status === 'missing'" @click="revealArtifact(artifact)">{{ t('reveal') }}</button>
+              <button class="ghost compact" :disabled="artifact.status === 'missing'" @click="copyArtifactPath(artifact)">{{ t('copyPath') }}</button>
+              <button class="ghost compact" @click="deleteArtifact(artifact, false)">{{ t('removeIndex') }}</button>
+              <button class="danger compact" :disabled="artifact.status === 'missing'" @click="deleteArtifact(artifact, true)">{{ t('deleteFile') }}</button>
+            </div>
+          </article>
+        </section>
+        <section v-else class="empty-state"><span class="empty-icon">▧</span><p>{{ loadingArtifacts ? t('loadingArtifacts') : t('noArtifacts') }}</p></section>
       </template>
 
       <template v-else-if="activeTab === 'settings'">

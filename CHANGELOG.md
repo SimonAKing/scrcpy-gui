@@ -6,6 +6,7 @@
 
 - Add a device workspace with read-only device details, cached launchable app discovery/start, and reviewed multi-device file push and APK installation with bounded concurrency and per-target progress/results.
 - Route new device operations through a shared argv-only ADB service and retain structured exit codes and package-manager details without exposing local source paths to the Renderer.
+- Persist screenshots, recordings, and file/APK reports in a reconciled main-process artifact library with missing/incomplete states and narrow open, reveal, copy, index-removal, and confirmed file-deletion operations.
 
 ## 2.0.0-beta.5
 

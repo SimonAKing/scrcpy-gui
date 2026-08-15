@@ -232,6 +232,29 @@ export interface DeviceOverview {
   batteryLevel?: number
 }
 
+export type ArtifactKind = 'screenshot' | 'recording' | 'transfer-report' | 'diagnostic'
+export type ArtifactStatus = 'available' | 'missing' | 'incomplete'
+
+export interface ArtifactRecord {
+  id: string
+  kind: ArtifactKind
+  status: ArtifactStatus
+  createdAt: string
+  updatedAt: string
+  name: string
+  path: string
+  size: number
+  deviceId?: string
+  sessionId?: string
+  metadata: Record<string, string | number | boolean>
+}
+
+export interface ArtifactQuery {
+  limit: number
+  kinds?: ArtifactKind[]
+  deviceId?: string
+}
+
 export type DeviceControlAction =
   | 'back'
   | 'home'
@@ -435,6 +458,11 @@ export interface ScrcpyApi {
   installApk(runtime: RuntimeConfig, serials: string[], replace: boolean, downgrade: boolean): Promise<OperationResult<BatchOperationResult<ApkInstallResult>>>
   listApps(runtime: RuntimeConfig, serial: string, refresh: boolean): Promise<OperationResult<InstalledApp[]>>
   startApp(runtime: RuntimeConfig, serial: string, packageId: string): Promise<OperationResult<string>>
+  listArtifacts(query: ArtifactQuery): Promise<OperationResult<ArtifactRecord[]>>
+  openArtifact(id: string): Promise<OperationResult>
+  revealArtifact(id: string): Promise<OperationResult>
+  copyArtifactPath(id: string): Promise<OperationResult>
+  deleteArtifact(id: string, deleteFile: boolean): Promise<OperationResult>
   setMinimizeToTray(enabled: boolean): Promise<void>
   setQuitBehavior(runtime: RuntimeConfig, killAdbOnQuit: boolean): Promise<void>
   setBossKey(enabled: boolean, accelerator: string): Promise<OperationResult<string>>
