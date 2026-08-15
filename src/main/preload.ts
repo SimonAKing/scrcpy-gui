@@ -69,6 +69,8 @@ const api: ScrcpyApi = {
   previewProfileImport: (runtime: RuntimeConfig) => ipcRenderer.invoke('profile:import-preview', runtime),
   commitProfileImport: (token: string, strategy: ProfileImportStrategy, keepMachinePaths: boolean) =>
     ipcRenderer.invoke('profile:import-commit', token, strategy, keepMachinePaths),
+  probeDeviceCapabilities: (runtime: RuntimeConfig, serial: string, refresh = false) =>
+    ipcRenderer.invoke('capability:device-probe', runtime, serial, refresh),
   setMinimizeToTray: (enabled: boolean) => ipcRenderer.invoke('app:minimize-to-tray', enabled),
   setQuitBehavior: (runtime: RuntimeConfig, killAdbOnQuit: boolean) =>
     ipcRenderer.invoke('app:quit-behavior', runtime, killAdbOnQuit),

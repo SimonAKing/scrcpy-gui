@@ -5,6 +5,7 @@
 ### Added
 
 - Model Camera, Virtual display, Record-only, Control-only, and OTG as validated launch scenes with official scrcpy 4.1 argv serialization, explicit conflicts, and portable Profile support.
+- Probe and cache each device's video/audio encoders, displays, cameras, declared sizes, high-speed frame rates, facing, and zoom range with bounded partial-failure reporting.
 
 ## 2.0.0-beta.6
 
