@@ -189,6 +189,8 @@ npm run build:dir
 
 提交 PR 前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。反馈 Bug 时请提供可复现步骤、平台与版本信息，以及「日志」页中相关内容。
 
+后续产品方向、功能需求、技术架构、安全边界与实施里程碑详见[产品与技术功能规格](docs/PRODUCT_TECHNICAL_SPEC.zh_CN.md)。
+
 ## 社区与致谢
 
 - 问题、Bug 与功能建议：[GitHub Issues](https://github.com/SimonAKing/scrcpy-gui/issues)
