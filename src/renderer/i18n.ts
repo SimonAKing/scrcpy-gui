@@ -9,7 +9,7 @@ const en: Record<string, string> = {
   settingsSection_recording: 'Recording', settingsSection_geometry: 'Window', settingsSection_advanced: 'Advanced',
   logs: 'Logs',
   runtimeSetup: 'Runtime setup',
-  runtimeHint: 'Bundled scrcpy 4.1 and adb are ready. Choose another executable only to override them.',
+  runtimeHint: 'Bundled scrcpy 4.1 and adb are ready to use.',
   chooseScrcpy: 'Choose scrcpy',
   recheck: 'Recheck',
   ready: 'Ready',
@@ -116,7 +116,7 @@ const en: Record<string, string> = {
 const zhCN: Record<string, string> = {
   devices: '设备', settings: '设置', logs: '日志', settingsSection_general: '常规', settingsSection_video: '视频',
   settingsSection_controls: '控制', settingsSection_recording: '录制', settingsSection_geometry: '窗口', settingsSection_advanced: '高级', runtimeSetup: '运行环境',
-  runtimeHint: '内置 scrcpy 4.1 与 adb 已就绪；只有需要覆盖时才选择其他可执行文件。', chooseScrcpy: '选择其他 scrcpy',
+  runtimeHint: '已内置 scrcpy 4.1 与 adb，可以直接使用。', chooseScrcpy: '选择其他 scrcpy',
   recheck: '重新检测', ready: '可用', notFound: '未找到', refresh: '刷新', connectedDevices: '已连接设备',
   noDevices: '未检测到设备。请连接 USB 调试，或在下方使用无线配对。', launchSelected: '打开所选设备', stop: '停止',
   disconnect: '断开', unauthorized: '请在设备上允许调试，然后刷新。', wireless: '无线调试',
@@ -163,7 +163,7 @@ const zhCN: Record<string, string> = {
 const zhTW: Record<string, string> = {
   ...zhCN,
   devices: '裝置', settings: '設定', logs: '日誌', runtimeSetup: '執行環境',
-  runtimeHint: '內建 scrcpy 4.1 與 adb 已就緒；只有需要覆蓋時才選擇其他執行檔。', chooseScrcpy: '選擇其他 scrcpy',
+  runtimeHint: '已內建 scrcpy 4.1 與 adb，可以直接使用。', chooseScrcpy: '選擇其他 scrcpy',
   recheck: '重新偵測', ready: '可用', notFound: '未找到', refresh: '重新整理', connectedDevices: '已連接裝置',
   noDevices: '未偵測到裝置。請連接 USB 偵錯，或在下方使用無線配對。', launchSelected: '開啟所選裝置', stop: '停止',
   disconnect: '中斷', unauthorized: '請在裝置上允許偵錯，然後重新整理。', wireless: '無線偵錯',
@@ -178,7 +178,7 @@ const zhTW: Record<string, string> = {
 
 const ru: Record<string, string> = {
   devices: 'Устройства', settings: 'Настройки', logs: 'Журнал', runtimeSetup: 'Среда выполнения',
-  runtimeHint: 'Встроенные scrcpy 4.1 и adb готовы. Выберите другой файл только для замены.',
+  runtimeHint: 'Встроенные scrcpy 4.1 и adb готовы к работе.',
   chooseScrcpy: 'Выбрать scrcpy', recheck: 'Проверить', ready: 'Готово', notFound: 'Не найдено', refresh: 'Обновить',
   connectedDevices: 'Подключённые устройства', noDevices: 'Устройства не найдены. Подключите USB-отладку или используйте беспроводное сопряжение ниже.',
   launchSelected: 'Открыть выбранные', stop: 'Остановить', disconnect: 'Отключить',
