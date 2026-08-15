@@ -49,6 +49,13 @@ export function strictBoolean(value: unknown, name: string): boolean {
   return value
 }
 
+export function nonNegativeInteger(value: unknown, name: string): number {
+  if (!Number.isInteger(value) || Number(value) < 0 || Number(value) > Number.MAX_SAFE_INTEGER) {
+    throw new TypeError(`${name} must be a non-negative safe integer.`)
+  }
+  return Number(value)
+}
+
 function finiteNumber(value: unknown, name: string, min: number, max: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
     throw new TypeError(`${name} must be a finite number from ${min} to ${max}.`)

@@ -7,6 +7,7 @@ import {
   deviceLaunches,
   deviceSerial,
   launchConfig,
+  nonNegativeInteger,
   runtimeConfig,
   strictBoolean
 } from '../src/main/ipcValidation'
@@ -30,6 +31,7 @@ describe('IPC scalar validation', () => {
     expect(strictBoolean(false, 'enabled')).toBe(false)
     expect(deviceSerial('ABC123')).toBe('ABC123')
     expect(controlAction('home')).toBe('home')
+    expect(nonNegativeInteger(0, 'revision')).toBe(0)
   })
 
   it('rejects coercion, null bytes and oversized values', () => {
@@ -38,6 +40,8 @@ describe('IPC scalar validation', () => {
     expect(() => deviceSerial('')).toThrow('1 to 512')
     expect(() => deviceSerial('x'.repeat(513))).toThrow('1 to 512')
     expect(() => controlAction('shell')).toThrow('not supported')
+    expect(() => nonNegativeInteger(-1, 'revision')).toThrow('non-negative safe integer')
+    expect(() => nonNegativeInteger(1.5, 'revision')).toThrow('non-negative safe integer')
   })
 })
 
