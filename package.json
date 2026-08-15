@@ -20,6 +20,8 @@
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "build": "npm run typecheck && electron-vite build",
+    "icons:generate": "node scripts/generate-icons.mjs",
+    "icons:check": "node scripts/generate-icons.mjs --check",
     "prepare:scrcpy": "node scripts/fetch-scrcpy.mjs",
     "build:dir": "npm run build && npm run prepare:scrcpy && electron-builder --dir",
     "dist": "npm run build && npm run prepare:scrcpy && electron-builder --publish never",
@@ -31,6 +33,7 @@
     "vue": "^3.5.41"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^24.10.13",
     "@vitejs/plugin-vue": "^6.0.8",
     "electron": "^43.4.0",

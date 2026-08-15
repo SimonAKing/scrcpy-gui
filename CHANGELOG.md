@@ -8,6 +8,10 @@
 - Track every scrcpy launch as an independent session with an explicit startup lifecycle, PID, command, stop reason, and Sessions page.
 - Cover long-running, early-exit, normal-exit, duplicate, missing-binary, and stop behavior with controlled child-process integration tests.
 
+### Fixed
+
+- Replace the blurred legacy tomato artwork with one high-resolution vector source and clean generated icons for Windows, macOS, Linux, and the tray.
+
 ### Security
 
 - Validate every privileged IPC call against the main application frame and trusted renderer URL.
