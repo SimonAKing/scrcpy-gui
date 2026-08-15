@@ -44,7 +44,7 @@ export function defaultPersistedConfig(locale: Locale): PersistedConfig {
     runtime: { scrcpyPath: '' }, locale, muteNotifications: false, minimizeToTray: false, killAdbOnQuit: false,
     bossKeyEnabled: false, bossKeyAccelerator: 'CommandOrControl+Shift+B', autoSelectFirstDevice: true,
     autoLaunchDevices: {}, launch: defaultLaunchConfig(), profiles: [], deviceProfiles: {}, deviceAliases: {},
-    wirelessTargets: [], automations: []
+    wirelessTargets: [], automations: [], groups: []
   }
 }
 
@@ -67,7 +67,8 @@ export function legacyConfigView(value: unknown, locale: Locale): PersistedConfi
     deviceProfiles: stored.deviceProfiles || {}, deviceAliases: stored.deviceAliases || {},
     autoLaunchDevices: stored.autoLaunchDevices || {},
     wirelessTargets: Array.isArray(stored.wirelessTargets) ? stored.wirelessTargets : [],
-    automations: Array.isArray(stored.automations) ? stored.automations : []
+    automations: Array.isArray(stored.automations) ? stored.automations : [],
+    groups: Array.isArray(stored.groups) ? stored.groups : []
   }
 }
 
@@ -80,10 +81,19 @@ export function configView(config: AppConfigV3): PersistedConfig {
     if (device.alias) deviceAliases[device.lastSerial] = device.alias
     if (device.autoLaunch) autoLaunchDevices[device.lastSerial] = true
   }
+  const serialByDeviceId = new Map(config.knownDevices.map((device) => [device.id, device.lastSerial]))
   return {
     runtime: { scrcpyPath: config.runtime.mode === 'custom' ? config.runtime.customScrcpyPath : '' },
     launch: structuredClone(config.defaults.launch), profiles: structuredClone(config.profiles), deviceProfiles,
     deviceAliases, wirelessTargets: structuredClone(config.wirelessTargets), automations: structuredClone(config.automations),
+    groups: config.groups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      serials: group.deviceIds.map((id) => serialByDeviceId.get(id)).filter(Boolean) as string[],
+      defaultProfileId: group.defaultProfileId,
+      concurrencyLimit: group.concurrencyLimit,
+      description: group.description
+    })),
     locale: config.locale, muteNotifications: config.appearance.muteNotifications,
     minimizeToTray: config.defaults.minimizeToTray, killAdbOnQuit: config.defaults.killAdbOnQuit,
     bossKeyEnabled: config.shortcuts.bossKeyEnabled, bossKeyAccelerator: config.shortcuts.bossKeyAccelerator,

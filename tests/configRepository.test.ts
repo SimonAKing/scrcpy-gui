@@ -133,6 +133,30 @@ describe('ConfigRepository', () => {
     expect(reloaded.config.profiles[0].extensions).toEqual({ vendor: { feature: true, values: [1, 'two', null] } })
   })
 
+  it('persists device groups by stable device id while exposing serials to the renderer', async () => {
+    const { directory, store } = await repository()
+    const loaded = await store.load('', 'en')
+    const changed = structuredClone(loaded.config)
+    changed.deviceAliases.SERIAL_A = 'Lab A'
+    changed.deviceAliases.SERIAL_B = 'Lab B'
+    changed.groups.push({
+      id: 'group-1', name: 'Lab', description: 'Test bench', serials: ['SERIAL_A', 'SERIAL_B'],
+      concurrencyLimit: 2
+    })
+    expect(await store.save(loaded.revision, changed)).toMatchObject({ ok: true })
+
+    const raw = JSON.parse(await readFile(join(directory, 'config.json'), 'utf8'))
+    expect(raw.groups[0].deviceIds).toHaveLength(2)
+    expect(raw.groups[0].deviceIds).not.toContain('SERIAL_A')
+    expect(raw.knownDevices.every((device: { groupIds: string[] }) => device.groupIds.includes('group-1'))).toBe(true)
+
+    const reloaded = await new ConfigRepository(directory, () => fixedNow).load('', 'en')
+    expect(reloaded.config.groups[0]).toEqual({
+      id: 'group-1', name: 'Lab', description: 'Test bench', serials: ['SERIAL_A', 'SERIAL_B'],
+      defaultProfileId: undefined, concurrencyLimit: 2
+    })
+  })
+
   it('bounds the legacy migration payload before parsing it', async () => {
     const { store } = await repository()
     await expect(store.load(`{"padding":"${'x'.repeat(2 * 1024 * 1024)}"}`, 'en')).rejects.toThrow('2 MB')

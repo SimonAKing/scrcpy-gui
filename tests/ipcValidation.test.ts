@@ -3,6 +3,8 @@ import type { LaunchConfig } from '../src/shared/types'
 import { defaultLaunchConfig } from '../src/shared/config'
 import {
   automationSteps,
+  automationMacro,
+  batchPreflightRequest,
   boundedString,
   commandPreviewRequests,
   controlAction,
@@ -81,7 +83,17 @@ describe('IPC runtime and launch validation', () => {
 
 describe('IPC automation validation', () => {
   it('accepts safe actions and delays', () => {
-    expect(automationSteps([{ action: 'back', delayMs: 250 }])).toEqual([{ action: 'back', delayMs: 250 }])
+    expect(automationSteps([{ action: 'back', delayMs: 250 }])).toEqual([
+      { type: 'delay', durationMs: 250 },
+      { type: 'control', action: 'back' }
+    ])
+    expect(automationSteps([
+      { type: 'tap', x: 0.25, y: 0.75, coordinateSpace: 'normalized' },
+      { type: 'swipe', from: { x: 0, y: 0 }, to: { x: 1, y: 1 }, durationMs: 250, coordinateSpace: 'normalized' },
+      { type: 'text', value: 'hello world', sensitive: false },
+      { type: 'start-app', packageId: 'com.example.app' },
+      { type: 'assert-device', condition: { type: 'orientation', value: 'portrait' } }
+    ])).toHaveLength(5)
   })
 
   it('rejects unsafe, oversized and overlong automations', () => {
@@ -91,7 +103,29 @@ describe('IPC automation validation', () => {
       '30 minutes'
     )
     expect(() => automationSteps(Array.from({ length: 201 }, () => ({ action: 'home', delayMs: 0 })))).toThrow(
-      '0 to 200'
+      '1 to 200'
     )
+    expect(() => automationSteps([{ type: 'tap', x: 1.1, y: 0, coordinateSpace: 'normalized' }])).toThrow('0 to 1')
+    expect(() => automationSteps([{ type: 'text', value: 'token', sensitive: true }])).toThrow('Sensitive text')
+    expect(() => automationSteps([{ type: 'text', value: 'hello; reboot', sensitive: false }])).toThrow('unsafe')
+    expect(() => automationSteps([{ type: 'shell', command: 'id' }])).toThrow('not supported')
+  })
+
+  it('validates frozen automation and batch plans', () => {
+    const macro = automationMacro({
+      id: 'macro', name: 'Launch', steps: [{ action: 'home', delayMs: 0 }]
+    })
+    expect(macro).toMatchObject({ schemaVersion: 2, description: '', design: { orientation: 'any', aspectRatio: 0 } })
+    const plan = batchPreflightRequest({
+      serials: ['ABC'], concurrencyLimit: 1,
+      action: { type: 'automation', automation: macro }
+    })
+    expect(plan.action.type).toBe('automation')
+    expect(() => batchPreflightRequest({
+      serials: ['ABC'], concurrencyLimit: 9, action: { type: 'screenshot' }
+    })).toThrow('1 to 8')
+    expect(() => batchPreflightRequest({
+      serials: ['ABC'], concurrencyLimit: 1, action: { type: 'launch', launches: [] }
+    })).toThrow('1 to 100')
   })
 })
