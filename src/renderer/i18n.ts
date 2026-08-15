@@ -2,6 +2,7 @@ import type { Locale } from '../shared/types'
 
 const en: Record<string, string> = {
   devices: 'Devices',
+  device: 'Device',
   settings: 'Settings',
   settingsSection_general: 'General', settingsSection_video: 'Video', settingsSection_controls: 'Controls',
   settingsSection_recording: 'Recording', settingsSection_geometry: 'Window', settingsSection_advanced: 'Advanced',
@@ -29,6 +30,8 @@ const en: Record<string, string> = {
   previewCommand: 'Preview command', commandPreview: 'Command preview',
   commandPreviewHint: 'Exact argv generated for each selected device, shown as a JSON array and never executed through a shell.',
   commandPreviewFailed: 'Could not build the command preview.', close: 'Close',
+  source_session: 'Session managed', source_global: 'Global settings', source_profile: 'Profile', sourceProfile: 'Profile',
+  'source_device-override': 'Device override', source_generated: 'Generated', source_expert: 'Expert arg',
   launchSelected: 'Launch selected',
   stop: 'Stop',
   disconnect: 'Disconnect',
@@ -76,7 +79,7 @@ const en: Record<string, string> = {
   initialWindow: 'Initial window (x / y / width / height)',
   advanced: 'Advanced',
   extraArgs: 'Additional scrcpy arguments (one argument per line)',
-  extraArgsHint: 'Arguments are passed directly without a shell. Device serial overrides are rejected.',
+  extraArgsHint: 'Arguments are passed directly without a shell. Flags already managed by the GUI are rejected; unknown flags are preserved with a warning.',
   muteNotifications: 'Mute popup notifications',
   minimizeToTray: 'Minimize to tray when closing the window',
   killAdbOnQuit: 'Stop the shared ADB server when quitting',
@@ -128,7 +131,7 @@ const en: Record<string, string> = {
 }
 
 const zhCN: Record<string, string> = {
-  devices: '设备', sessions: '会话', settings: '设置', logs: '日志', settingsSection_general: '常规', settingsSection_video: '视频',
+  devices: '设备', device: '设备', sessions: '会话', settings: '设置', logs: '日志', settingsSection_general: '常规', settingsSection_video: '视频',
   sessionCenter: '会话中心', sessionsHint: '每次启动都有独立身份和经过验证的生命周期；进程只有通过启动观察窗口后才会显示为运行中。',
   noSessions: '本次运行尚未启动 scrcpy 会话。', stopAllSessions: '停止全部活动会话', sessionsStopFailed: '个会话无法停止。',
   sessionState_queued: '排队中', sessionState_preflighting: '预检中', sessionState_launching: '启动中',
@@ -145,6 +148,8 @@ const zhCN: Record<string, string> = {
   previewCommand: '预览命令', commandPreview: '命令预览',
   commandPreviewHint: '显示每台所选设备最终生成的 argv；结果以 JSON 数组表示，不经过 shell 执行。',
   commandPreviewFailed: '无法生成命令预览。', close: '关闭',
+  source_session: '会话管理', source_global: '全局设置', source_profile: '配置', sourceProfile: '配置',
+  'source_device-override': '设备覆盖', source_generated: '自动生成', source_expert: '专家参数',
   disconnect: '断开', unauthorized: '请在设备上允许调试，然后刷新。', wireless: '无线调试',
   wirelessHint: 'Android 11+：先使用设备显示的地址、端口和六位验证码配对，再使用连接端口连接。',
   address: '主机或主机:端口', pairAddress: '配对主机:端口', pairingCode: '六位配对码', connect: '连接', pair: '配对',
@@ -160,7 +165,7 @@ const zhCN: Record<string, string> = {
   recordEnabled: '录制会话', recordPath: '录制文件', autoRecordName: '每次启动自动生成时间文件名', recordDirectory: '录制目录', chooseFolder: '选择目录',
   chooseFile: '选择文件', noPlayback: '仅录制，不显示投屏窗口', geometry: '位置与裁剪',
   crop: '裁剪（x / y / 宽 / 高）', initialWindow: '初始窗口（x / y / 宽 / 高）', advanced: '高级',
-  extraArgs: '附加 scrcpy 参数（每行一个）', extraArgsHint: '参数不经过 shell，设备序列号参数会被拒绝。',
+  extraArgs: '附加 scrcpy 参数（每行一个）', extraArgsHint: '参数不经过 shell；GUI 已管理的参数会被拒绝，未知参数会保留并给出警告。',
   muteNotifications: '关闭弹出通知', resetSettings: '恢复默认设置', savedAutomatically: '设置会自动保存。', clearLogs: '清空日志',
   minimizeToTray: '关闭窗口时最小化到系统托盘',
   killAdbOnQuit: '退出时停止共享的 ADB 服务',
@@ -189,7 +194,7 @@ const zhCN: Record<string, string> = {
 
 const zhTW: Record<string, string> = {
   ...zhCN,
-  devices: '裝置', sessions: '工作階段', settings: '設定', logs: '日誌', runtimeSetup: '執行環境',
+  devices: '裝置', device: '裝置', sessions: '工作階段', settings: '設定', logs: '日誌', runtimeSetup: '執行環境',
   sessionCenter: '工作階段中心', sessionsHint: '每次啟動都有獨立身分與經驗證的生命週期；程序通過啟動觀察視窗後才會顯示為執行中。',
   noSessions: '本次執行尚未啟動 scrcpy 工作階段。', stopAllSessions: '停止全部作用中工作階段', sessionsStopFailed: '個工作階段無法停止。',
   sessionState_queued: '排隊中', sessionState_preflighting: '預檢中', sessionState_launching: '啟動中',
@@ -205,6 +210,8 @@ const zhTW: Record<string, string> = {
   previewCommand: '預覽命令', commandPreview: '命令預覽',
   commandPreviewHint: '顯示每台所選裝置最終產生的 argv；結果以 JSON 陣列表示，不經過 shell 執行。',
   commandPreviewFailed: '無法產生命令預覽。', close: '關閉',
+  source_session: '工作階段管理', source_global: '全域設定', source_profile: '設定檔', sourceProfile: '設定檔',
+  'source_device-override': '裝置覆寫', source_generated: '自動產生', source_expert: '專家參數',
   disconnect: '中斷', unauthorized: '請在裝置上允許偵錯，然後重新整理。', wireless: '無線偵錯',
   general: '一般', windowTitle: '視窗標題', shortcutModifier: '快捷鍵修飾鍵', video: '影片', behavior: '視窗與裝置',
   recording: '錄製', recordEnabled: '錄製工作階段', recordPath: '錄製檔案', chooseFile: '選擇檔案', geometry: '位置與裁剪',
@@ -217,7 +224,7 @@ const zhTW: Record<string, string> = {
 }
 
 const ru: Record<string, string> = {
-  devices: 'Устройства', sessions: 'Сеансы', settings: 'Настройки', logs: 'Журнал', runtimeSetup: 'Среда выполнения',
+  devices: 'Устройства', device: 'Устройство', sessions: 'Сеансы', settings: 'Настройки', logs: 'Журнал', runtimeSetup: 'Среда выполнения',
   sessionCenter: 'Центр сеансов', sessionsHint: 'Каждый запуск имеет отдельный идентификатор и проверяемый жизненный цикл.',
   noSessions: 'В этом запуске приложения ещё не было сеансов scrcpy.', stopAllSessions: 'Остановить активные', sessionsStopFailed: 'сеансов не удалось остановить.',
   sessionState_queued: 'В очереди', sessionState_preflighting: 'Проверка', sessionState_launching: 'Запуск',
@@ -234,6 +241,8 @@ const ru: Record<string, string> = {
   previewCommand: 'Показать команду', commandPreview: 'Предпросмотр команды',
   commandPreviewHint: 'Точный argv для каждого выбранного устройства; аргументы не выполняются через shell.',
   commandPreviewFailed: 'Не удалось создать предпросмотр команды.', close: 'Закрыть',
+  source_session: 'Управляется сеансом', source_global: 'Общие настройки', source_profile: 'Профиль', sourceProfile: 'Профиль',
+  'source_device-override': 'Настройка устройства', source_generated: 'Создано автоматически', source_expert: 'Экспертный аргумент',
   unauthorized: 'Разрешите отладку на устройстве, затем обновите список.', wireless: 'Беспроводная отладка',
   wirelessHint: 'Android 11+: выполните сопряжение по адресу, порту и шестизначному коду с устройства, затем подключитесь через порт подключения.',
   address: 'Хост или хост:порт', pairAddress: 'Адрес сопряжения хост:порт', pairingCode: '6-значный код', connect: 'Подключить', pair: 'Сопрячь',
@@ -245,7 +254,7 @@ const ru: Record<string, string> = {
   fullscreen: 'Полный экран', borderless: 'Окно без рамки', recording: 'Запись', recordEnabled: 'Записывать сеанс',
   recordPath: 'Файл записи', chooseFile: 'Выбрать файл', noPlayback: 'Записывать без окна просмотра', geometry: 'Положение и обрезка',
   crop: 'Обрезка (x / y / ширина / высота)', initialWindow: 'Начальное окно (x / y / ширина / высота)', advanced: 'Дополнительно',
-  extraArgs: 'Дополнительные аргументы scrcpy (один на строку)', extraArgsHint: 'Аргументы передаются напрямую без оболочки. Переопределение серийного номера запрещено.',
+  extraArgs: 'Дополнительные аргументы scrcpy (один на строку)', extraArgsHint: 'Аргументы передаются без оболочки. Управляемые GUI параметры запрещены, неизвестные сохраняются с предупреждением.',
   muteNotifications: 'Отключить всплывающие уведомления', resetSettings: 'Сбросить настройки', savedAutomatically: 'Настройки сохраняются автоматически.',
   minimizeToTray: 'Сворачивать в трей при закрытии окна',
   clearLogs: 'Очистить журнал', noLogs: 'Вывод процессов пока отсутствует.', openGithub: 'GitHub', running: 'Запущено', offline: 'Не в сети',

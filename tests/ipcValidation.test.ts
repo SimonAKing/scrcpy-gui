@@ -3,6 +3,7 @@ import type { LaunchConfig } from '../src/shared/types'
 import {
   automationSteps,
   boundedString,
+  commandPreviewRequests,
   controlAction,
   deviceLaunches,
   deviceSerial,
@@ -67,6 +68,18 @@ describe('IPC runtime and launch validation', () => {
     expect(() => deviceLaunches(Array.from({ length: 101 }, (_, index) => ({
       serial: `device-${index}`, launch: validLaunch()
     })))).toThrow('1 to 100')
+  })
+
+  it('validates command provenance instead of trusting Renderer labels', () => {
+    expect(commandPreviewRequests([{
+      serial: 'ABC', launch: validLaunch(), source: 'profile', profileName: 'Gaming', deviceWindowTitleOverride: true
+    }])).toMatchObject([{ serial: 'ABC', source: 'profile', profileName: 'Gaming', deviceWindowTitleOverride: true }])
+    expect(() => commandPreviewRequests([{
+      serial: 'ABC', launch: validLaunch(), source: 'profile', deviceWindowTitleOverride: false
+    }])).toThrow('profileName is required')
+    expect(() => commandPreviewRequests([{
+      serial: 'ABC', launch: validLaunch(), source: 'remote', deviceWindowTitleOverride: false
+    }])).toThrow('not supported')
   })
 })
 

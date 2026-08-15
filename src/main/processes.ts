@@ -16,7 +16,7 @@ import type {
   ScrcpySessionEvent,
   SessionStopReason
 } from '../shared/types'
-import { buildScrcpyArgs, isSupportedScrcpyVersion, parseAdbDevices, validateDeviceAddress } from './scrcpy'
+import { buildScrcpyArgs, isSupportedScrcpyVersion, parseAdbDevices, prepareLaunchConfig, validateDeviceAddress } from './scrcpy'
 import { ScrcpySessionManager } from './sessionManager'
 import { buildCapabilitySnapshot } from './capabilities'
 import { DeviceTracker } from './deviceTracker'
@@ -451,17 +451,7 @@ export async function startScrcpy(
   for (const { serial, launch } of uniqueLaunches) {
     let args: string[]
     try {
-      let effectiveLaunch = launch
-      if (launch.recordEnabled && launch.autoRecordName) {
-        if (!launch.recordDirectory.trim()) throw new Error('Choose a recording folder for automatic filenames.')
-        const safeSerial = serial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
-        const timestamp = new Date().toISOString().replaceAll(':', '-').slice(0, 19)
-        effectiveLaunch = {
-          ...launch,
-          recordPath: join(launch.recordDirectory.trim(), `scrcpy-${safeSerial}-${timestamp}.mp4`)
-        }
-      }
-      args = buildScrcpyArgs(effectiveLaunch, serial)
+      args = buildScrcpyArgs(prepareLaunchConfig(launch, serial), serial)
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
