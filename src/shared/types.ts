@@ -169,6 +169,69 @@ export interface WirelessTarget {
   autoConnect: boolean
 }
 
+export type FileConflictPolicy = 'replace' | 'skip'
+
+export interface BatchItemResult<T> {
+  targetId: string
+  ok: boolean
+  data?: T
+  error?: StructuredError
+}
+
+export interface BatchOperationResult<T> {
+  id: string
+  startedAt: string
+  completedAt: string
+  results: BatchItemResult<T>[]
+}
+
+export interface BatchProgressEvent {
+  batchId: string
+  kind: 'file-push' | 'apk-install'
+  deviceId: string
+  targetId: string
+  status: 'running' | 'success' | 'failed' | 'skipped'
+  timestamp: string
+  message: string
+  size?: number
+}
+
+export interface FileTransferResult {
+  serial: string
+  sourceName: string
+  size: number
+  targetPath: string
+  skipped: boolean
+  output: string
+}
+
+export interface ApkInstallResult {
+  serial: string
+  sourceName: string
+  size: number
+  replace: boolean
+  downgrade: boolean
+  output: string
+}
+
+export interface InstalledApp {
+  packageId: string
+  label: string
+  system: boolean
+  launchable: boolean
+}
+
+export interface DeviceOverview {
+  serial: string
+  manufacturer: string
+  model: string
+  androidVersion: string
+  sdk: string
+  abi: string
+  displaySize: string
+  batteryLevel?: number
+}
+
 export type DeviceControlAction =
   | 'back'
   | 'home'
@@ -367,6 +430,11 @@ export interface ScrcpyApi {
   control(runtime: RuntimeConfig, serial: string, action: DeviceControlAction): Promise<OperationResult<string>>
   screenshot(runtime: RuntimeConfig, serial: string): Promise<OperationResult<string>>
   runAutomation(runtime: RuntimeConfig, serial: string, steps: AutomationStep[]): Promise<OperationResult<string>>
+  getDeviceOverview(runtime: RuntimeConfig, serial: string): Promise<OperationResult<DeviceOverview>>
+  pushFiles(runtime: RuntimeConfig, serials: string[], target: string, conflict: FileConflictPolicy): Promise<OperationResult<BatchOperationResult<FileTransferResult>>>
+  installApk(runtime: RuntimeConfig, serials: string[], replace: boolean, downgrade: boolean): Promise<OperationResult<BatchOperationResult<ApkInstallResult>>>
+  listApps(runtime: RuntimeConfig, serial: string, refresh: boolean): Promise<OperationResult<InstalledApp[]>>
+  startApp(runtime: RuntimeConfig, serial: string, packageId: string): Promise<OperationResult<string>>
   setMinimizeToTray(enabled: boolean): Promise<void>
   setQuitBehavior(runtime: RuntimeConfig, killAdbOnQuit: boolean): Promise<void>
   setBossKey(enabled: boolean, accelerator: string): Promise<OperationResult<string>>
@@ -375,4 +443,5 @@ export interface ScrcpyApi {
   onSession(callback: (event: ScrcpySessionEvent) => void): () => void
   onDevices(callback: (event: DeviceTrackerEvent) => void): () => void
   onEvent(callback: (event: AppEvent) => void): () => void
+  onBatchProgress(callback: (event: BatchProgressEvent) => void): () => void
 }

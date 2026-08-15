@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Add a device workspace with read-only device details, cached launchable app discovery/start, and reviewed multi-device file push and APK installation with bounded concurrency and per-target progress/results.
+- Route new device operations through a shared argv-only ADB service and retain structured exit codes and package-manager details without exposing local source paths to the Renderer.
+
 ## 2.0.0-beta.5
 
 This release completes the capability, configuration, device-tracking, command, and diagnostics foundations planned for M1.

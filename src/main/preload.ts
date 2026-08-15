@@ -3,6 +3,8 @@ import type {
   AutomationStep,
   AppEvent,
   AppEventQuery,
+  BatchProgressEvent,
+  FileConflictPolicy,
   CommandPreviewRequest,
   DeviceControlAction,
   DeviceLaunch,
@@ -43,6 +45,15 @@ const api: ScrcpyApi = {
     ipcRenderer.invoke('device:screenshot', runtime, serial),
   runAutomation: (runtime: RuntimeConfig, serial: string, steps: AutomationStep[]) =>
     ipcRenderer.invoke('device:automation', runtime, serial, steps),
+  getDeviceOverview: (runtime: RuntimeConfig, serial: string) => ipcRenderer.invoke('device:overview', runtime, serial),
+  pushFiles: (runtime: RuntimeConfig, serials: string[], target: string, conflict: FileConflictPolicy) =>
+    ipcRenderer.invoke('device:push-files', runtime, serials, target, conflict),
+  installApk: (runtime: RuntimeConfig, serials: string[], replace: boolean, downgrade: boolean) =>
+    ipcRenderer.invoke('device:install-apk', runtime, serials, replace, downgrade),
+  listApps: (runtime: RuntimeConfig, serial: string, refresh: boolean) =>
+    ipcRenderer.invoke('device:apps', runtime, serial, refresh),
+  startApp: (runtime: RuntimeConfig, serial: string, packageId: string) =>
+    ipcRenderer.invoke('device:start-app', runtime, serial, packageId),
   setMinimizeToTray: (enabled: boolean) => ipcRenderer.invoke('app:minimize-to-tray', enabled),
   setQuitBehavior: (runtime: RuntimeConfig, killAdbOnQuit: boolean) =>
     ipcRenderer.invoke('app:quit-behavior', runtime, killAdbOnQuit),
@@ -68,6 +79,11 @@ const api: ScrcpyApi = {
     const listener = (_event: Electron.IpcRendererEvent, appEvent: AppEvent): void => callback(appEvent)
     ipcRenderer.on('app:event', listener)
     return () => ipcRenderer.removeListener('app:event', listener)
+  },
+  onBatchProgress: (callback: (event: BatchProgressEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: BatchProgressEvent): void => callback(progress)
+    ipcRenderer.on('batch:progress', listener)
+    return () => ipcRenderer.removeListener('batch:progress', listener)
   }
 }
 

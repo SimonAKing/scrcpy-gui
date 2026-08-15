@@ -40,9 +40,23 @@ export function failureFromUnknown<T = undefined>(
   fallback: string,
   options: StructuredErrorOptions = {}
 ): OperationResult<T> {
+  return { ok: false, error: structuredErrorFromUnknown(error, code, stage, fallback, options) }
+}
+
+export function structuredErrorFromUnknown(
+  error: unknown,
+  code: string,
+  stage: string,
+  fallback: string,
+  options: StructuredErrorOptions = {}
+): StructuredError {
   const detail = error instanceof Error && error.message.trim() ? error.message : String(error || '')
-  return operationFailure(code, stage, fallback, {
+  const exitCode = typeof (error as { exitCode?: unknown } | null)?.exitCode === 'number'
+    ? (error as { exitCode: number }).exitCode
+    : options.exitCode
+  return structuredError(code, stage, fallback, {
     ...options,
+    ...(exitCode === undefined ? {} : { exitCode }),
     ...(options.detail || !detail ? {} : { detail })
   })
 }

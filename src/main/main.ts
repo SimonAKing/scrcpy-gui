@@ -1,11 +1,14 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell, Tray } from 'electron'
-import { join } from 'node:path'
+import { basename, extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
+import { stat } from 'node:fs/promises'
 import type {
   AutomationStep,
+  BatchProgressEvent,
   DeviceControlAction,
   DeviceLaunch,
+  FileConflictPolicy,
   Locale,
   OperationResult,
   PersistedConfig,
@@ -21,6 +24,7 @@ import {
   getEnvironment,
   listDevices,
   listScrcpySessions,
+  listTrackedDevices,
   pairDevice,
   runDeviceAutomation,
   startScrcpy,
@@ -41,6 +45,7 @@ import {
   controlAction,
   deviceLaunches,
   deviceSerial,
+  deviceSerials,
   nonNegativeInteger,
   runtimeConfig,
   strictBoolean
@@ -50,6 +55,7 @@ import { buildScrcpyArgDetails, prepareLaunchConfig } from './scrcpy'
 import { ConfigRepository } from './configRepository'
 import { EventStore, validateEventQuery } from './eventStore'
 import { failureFromUnknown, operationFailure } from '../shared/errors'
+import { deviceWorkspaceService, validatePackageId, validateRemoteDirectory, type SelectedLocalFile } from './deviceWorkspaceService'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -257,6 +263,42 @@ function setBossKey(enabled: boolean, accelerator: string): OperationResult<stri
   }
 }
 
+function sendBatchProgress(progress: BatchProgressEvent): void {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('batch:progress', progress)
+  eventStore.publish({
+    level: progress.status === 'failed' ? 'error' : progress.status === 'running' ? 'debug' : 'info',
+    domain: 'artifact',
+    action: progress.kind,
+    deviceId: progress.deviceId,
+    stage: progress.status,
+    message: progress.message,
+    data: { batchId: progress.batchId, targetId: progress.targetId, size: progress.size }
+  })
+}
+
+async function selectedFiles(paths: string[], extensions?: Set<string>): Promise<SelectedLocalFile[]> {
+  if (paths.length < 1 || paths.length > 50) throw new TypeError('Select 1 to 50 files.')
+  return Promise.all(paths.map(async (path) => {
+    const info = await stat(path)
+    const name = basename(path)
+    if (!info.isFile()) throw new TypeError(`${name} is not a regular file.`)
+    if (extensions && !extensions.has(extname(name).toLowerCase())) throw new TypeError(`${name} is not a supported package file.`)
+    return { path, name, size: info.size }
+  }))
+}
+
+function availableDeviceSerial(value: unknown): string {
+  return availableDeviceSerials([value])[0]
+}
+
+function availableDeviceSerials(value: unknown): string[] {
+  const serials = deviceSerials(value)
+  const available = new Set(listTrackedDevices().filter((device) => device.state === 'device').map((device) => device.serial))
+  const missing = serials.filter((serial) => !available.has(serial))
+  if (missing.length) throw new TypeError(`Device is no longer available: ${missing.join(', ')}.`)
+  return serials
+}
+
 handle('app:version', () => app.getVersion())
 handle('events:list', (_event, query: unknown) => eventStore.list(validateEventQuery(query)))
 handle('events:clear', () => eventStore.clear())
@@ -373,6 +415,106 @@ handle(
   (_event, runtime: RuntimeConfig, serial: string, steps: AutomationStep[]) =>
     runDeviceAutomation(runtimeConfig(runtime), deviceSerial(serial), automationSteps(steps))
 )
+handle('device:overview', async (_event, runtime: RuntimeConfig, serial: string) => {
+  try {
+    return { ok: true, data: await deviceWorkspaceService.overview(runtimeConfig(runtime), availableDeviceSerial(serial)) }
+  } catch (error) {
+    return failureFromUnknown(error, 'DEVICE_OVERVIEW_FAILED', 'device-overview', 'Unable to read device details.', {
+      retryable: true,
+      suggestedActions: ['Confirm that the device is connected and authorized.']
+    })
+  }
+})
+handle('device:push-files', async (
+  _event,
+  runtime: RuntimeConfig,
+  serials: string[],
+  target: string,
+  conflict: FileConflictPolicy
+) => {
+  try {
+    const validatedRuntime = runtimeConfig(runtime)
+    const validatedSerials = availableDeviceSerials(serials)
+    const validatedTarget = validateRemoteDirectory(boundedString(target, 'remote target', 1_024))
+    if (conflict !== 'replace' && conflict !== 'skip') throw new TypeError('file conflict policy is not supported.')
+    const selection = await dialog.showOpenDialog({ title: 'Choose files to push', properties: ['openFile', 'multiSelections'] })
+    if (selection.canceled || selection.filePaths.length === 0) {
+      return operationFailure('FILE_SELECTION_CANCELED', 'file-selection', 'File selection canceled.')
+    }
+    const batch = await deviceWorkspaceService.pushFiles(
+      validatedRuntime,
+      validatedSerials,
+      await selectedFiles(selection.filePaths),
+      validatedTarget,
+      conflict,
+      sendBatchProgress
+    )
+    return { ok: true, data: batch }
+  } catch (error) {
+    return failureFromUnknown(error, 'FILE_PUSH_PREPARE_FAILED', 'file-push', 'Unable to prepare the file transfer.')
+  }
+})
+handle('device:install-apk', async (
+  _event,
+  runtime: RuntimeConfig,
+  serials: string[],
+  replace: boolean,
+  downgrade: boolean
+) => {
+  try {
+    const validatedRuntime = runtimeConfig(runtime)
+    const validatedSerials = availableDeviceSerials(serials)
+    const allowReplace = strictBoolean(replace, 'replace existing app')
+    const allowDowngrade = strictBoolean(downgrade, 'allow downgrade')
+    const selection = await dialog.showOpenDialog({
+      title: 'Choose an APK to install', properties: ['openFile'], filters: [{ name: 'Android package', extensions: ['apk'] }]
+    })
+    if (selection.canceled || !selection.filePaths[0]) {
+      return operationFailure('APK_SELECTION_CANCELED', 'apk-selection', 'APK selection canceled.')
+    }
+    const [file] = await selectedFiles([selection.filePaths[0]], new Set(['.apk']))
+    const batch = await deviceWorkspaceService.installApk(
+      validatedRuntime, validatedSerials, file, allowReplace, allowDowngrade, sendBatchProgress
+    )
+    return { ok: true, data: batch }
+  } catch (error) {
+    return failureFromUnknown(error, 'APK_INSTALL_PREPARE_FAILED', 'apk-install', 'Unable to prepare the APK installation.')
+  }
+})
+handle('device:apps', async (_event, runtime: RuntimeConfig, serial: string, refresh: boolean) => {
+  try {
+    return {
+      ok: true,
+      data: await deviceWorkspaceService.listApps(
+        runtimeConfig(runtime),
+        availableDeviceSerial(serial),
+        strictBoolean(refresh, 'refresh app list')
+      )
+    }
+  } catch (error) {
+    return failureFromUnknown(error, 'APP_LIST_FAILED', 'app-list', 'Unable to list installed applications.', {
+      retryable: true,
+      suggestedActions: ['Confirm that the device is connected and authorized.']
+    })
+  }
+})
+handle('device:start-app', async (_event, runtime: RuntimeConfig, serial: string, packageId: string) => {
+  try {
+    return {
+      ok: true,
+      data: await deviceWorkspaceService.startApp(
+        runtimeConfig(runtime),
+        availableDeviceSerial(serial),
+        validatePackageId(boundedString(packageId, 'package id', 255))
+      )
+    }
+  } catch (error) {
+    return failureFromUnknown(error, 'APP_START_FAILED', 'app-start', 'Unable to start the application.', {
+      retryable: true,
+      suggestedActions: ['Confirm that the package has a launcher activity.']
+    })
+  }
+})
 handle('shell:open', async (_event, rawUrl: string) => {
   const url = new URL(boundedString(rawUrl, 'external URL', 2048))
   const allowedHosts = new Set(['github.com', 'scrcpyapp.org'])

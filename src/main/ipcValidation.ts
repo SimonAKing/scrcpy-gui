@@ -93,6 +93,13 @@ export function deviceSerial(value: unknown): string {
   return boundedString(value, 'device serial', MAX_SERIAL_LENGTH)
 }
 
+export function deviceSerials(value: unknown, max = 20): string[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > max) {
+    throw new TypeError(`device serials must contain 1 to ${max} items.`)
+  }
+  return [...new Set(value.map((item) => deviceSerial(item)))]
+}
+
 export function controlAction(value: unknown): DeviceControlAction {
   return enumValue(value, 'device control action', controlActions)
 }
