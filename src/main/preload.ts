@@ -60,6 +60,9 @@ const api: ScrcpyApi = {
   revealArtifact: (id: string) => ipcRenderer.invoke('artifact:reveal', id),
   copyArtifactPath: (id: string) => ipcRenderer.invoke('artifact:copy-path', id),
   deleteArtifact: (id: string, deleteFile: boolean) => ipcRenderer.invoke('artifact:delete', id, deleteFile),
+  previewDiagnostics: (runtime: RuntimeConfig) => ipcRenderer.invoke('diagnostics:preview', runtime),
+  exportDiagnostics: (runtime: RuntimeConfig) => ipcRenderer.invoke('diagnostics:export', runtime),
+  openIssueHelper: (artifactId?: string) => ipcRenderer.invoke('diagnostics:issue-helper', artifactId),
   setMinimizeToTray: (enabled: boolean) => ipcRenderer.invoke('app:minimize-to-tray', enabled),
   setQuitBehavior: (runtime: RuntimeConfig, killAdbOnQuit: boolean) =>
     ipcRenderer.invoke('app:quit-behavior', runtime, killAdbOnQuit),

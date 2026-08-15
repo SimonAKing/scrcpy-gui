@@ -255,6 +255,14 @@ export interface ArtifactQuery {
   deviceId?: string
 }
 
+export interface DiagnosticPreview {
+  files: Array<{ name: string; description: string; bytes: number }>
+  redactions: Array<{ kind: string; count: number }>
+  estimatedBytes: number
+  maxBytes: number
+  eventCount: number
+}
+
 export type DeviceControlAction =
   | 'back'
   | 'home'
@@ -463,6 +471,9 @@ export interface ScrcpyApi {
   revealArtifact(id: string): Promise<OperationResult>
   copyArtifactPath(id: string): Promise<OperationResult>
   deleteArtifact(id: string, deleteFile: boolean): Promise<OperationResult>
+  previewDiagnostics(runtime: RuntimeConfig): Promise<OperationResult<DiagnosticPreview>>
+  exportDiagnostics(runtime: RuntimeConfig): Promise<OperationResult<ArtifactRecord>>
+  openIssueHelper(artifactId?: string): Promise<OperationResult>
   setMinimizeToTray(enabled: boolean): Promise<void>
   setQuitBehavior(runtime: RuntimeConfig, killAdbOnQuit: boolean): Promise<void>
   setBossKey(enabled: boolean, accelerator: string): Promise<OperationResult<string>>

@@ -315,6 +315,10 @@ export class ConfigRepository {
     return this.loadPromise
   }
 
+  snapshot(): PersistedConfig | undefined {
+    return this.current ? structuredClone(configView(this.current)) : undefined
+  }
+
   async save(expectedRevision: number, value: unknown): Promise<OperationResult<ConfigSaveResult>> {
     let resolveResult!: (result: OperationResult<ConfigSaveResult>) => void
     const result = new Promise<OperationResult<ConfigSaveResult>>((resolve) => { resolveResult = resolve })

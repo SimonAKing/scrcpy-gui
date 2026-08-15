@@ -18,6 +18,7 @@ import type {
   DeviceOverview,
   DeviceTrackerEvent,
   EnvironmentStatus,
+  DiagnosticPreview,
   FileConflictPolicy,
   FileTransferResult,
   InstalledApp,
@@ -92,6 +93,9 @@ const artifacts = ref<ArtifactRecord[]>([])
 const artifactKind = ref<ArtifactKind | 'all'>('all')
 const artifactDevice = ref('all')
 const loadingArtifacts = ref(false)
+const diagnosticPreview = ref<DiagnosticPreview | null>(null)
+const preparingDiagnostics = ref(false)
+const diagnosticArtifact = ref<ArtifactRecord | null>(null)
 const activeSerials = ref(new Set<string>())
 const loadingEnvironment = ref(false)
 const loadingDevices = ref(false)
@@ -567,6 +571,34 @@ async function deleteArtifact(artifact: ArtifactRecord, deleteFile: boolean): Pr
   }
   artifacts.value = artifacts.value.filter((item) => item.id !== artifact.id)
   toast('success', deleteFile ? t('artifactFileDeleted') : t('artifactIndexDeleted'))
+}
+
+async function previewDiagnostics(): Promise<void> {
+  if (preparingDiagnostics.value) return
+  preparingDiagnostics.value = true
+  const result = await window.scrcpy.previewDiagnostics(runtimeSnapshot())
+  preparingDiagnostics.value = false
+  if (result.ok) diagnosticPreview.value = result.data || null
+  else toast('error', operationErrorMessage(result, t('diagnosticPreviewFailed')))
+}
+
+async function exportDiagnostics(): Promise<void> {
+  if (!diagnosticPreview.value || preparingDiagnostics.value) return
+  preparingDiagnostics.value = true
+  const result = await window.scrcpy.exportDiagnostics(runtimeSnapshot())
+  preparingDiagnostics.value = false
+  if (!result.ok) {
+    if (result.error?.code !== 'DIAGNOSTIC_EXPORT_CANCELED') toast('error', operationErrorMessage(result, t('diagnosticExportFailed')))
+    return
+  }
+  diagnosticArtifact.value = result.data || null
+  if (result.data) artifacts.value = [result.data, ...artifacts.value.filter((item) => item.id !== result.data?.id)]
+  toast('success', t('diagnosticExported'))
+}
+
+async function openIssueHelper(artifact: ArtifactRecord | null = diagnosticArtifact.value): Promise<void> {
+  const result = await window.scrcpy.openIssueHelper(artifact?.id)
+  if (!result.ok) toast('error', operationErrorMessage(result, t('issueHelperFailed')))
 }
 
 async function chooseRecordPath(): Promise<void> {
@@ -1096,6 +1128,7 @@ onBeforeUnmount(() => {
               <button class="secondary compact" :disabled="artifact.status === 'missing'" @click="openArtifact(artifact)">{{ t('open') }}</button>
               <button class="ghost compact" :disabled="artifact.status === 'missing'" @click="revealArtifact(artifact)">{{ t('reveal') }}</button>
               <button class="ghost compact" :disabled="artifact.status === 'missing'" @click="copyArtifactPath(artifact)">{{ t('copyPath') }}</button>
+              <button v-if="artifact.kind === 'diagnostic'" class="secondary compact" :disabled="artifact.status === 'missing'" @click="openIssueHelper(artifact)">{{ t('reportIssue') }}</button>
               <button class="ghost compact" @click="deleteArtifact(artifact, false)">{{ t('removeIndex') }}</button>
               <button class="danger compact" :disabled="artifact.status === 'missing'" @click="deleteArtifact(artifact, true)">{{ t('deleteFile') }}</button>
             </div>
@@ -1191,7 +1224,31 @@ onBeforeUnmount(() => {
           <div class="logs-actions">
             <select v-model="logLevel" :aria-label="t('filterByLevel')"><option value="all">{{ t('allLevels') }}</option><option v-for="level in eventLevels" :key="level" :value="level">{{ level }}</option></select>
             <select v-model="logDomain" :aria-label="t('filterByDomain')"><option value="all">{{ t('allDomains') }}</option><option v-for="domain in eventDomains" :key="domain" :value="domain">{{ domain }}</option></select>
+            <button class="secondary" :disabled="preparingDiagnostics" @click="previewDiagnostics">{{ t('prepareDiagnostics') }}</button>
             <button class="ghost" @click="clearLogs">{{ t('clearLogs') }}</button>
+          </div>
+        </section>
+        <section v-if="diagnosticPreview" class="panel diagnostic-preview">
+          <div class="panel-title">
+            <div><p class="eyebrow">{{ t('diagnosticPreview') }}</p><p class="muted">{{ t('diagnosticPrivacyHint') }}</p></div>
+            <span class="diagnostic-size">{{ formatBytes(diagnosticPreview.estimatedBytes) }} / {{ formatBytes(diagnosticPreview.maxBytes) }}</span>
+          </div>
+          <div class="diagnostic-grid">
+            <div class="diagnostic-files">
+              <strong>{{ t('includedFiles') }}</strong>
+              <div v-for="file in diagnosticPreview.files" :key="file.name"><code>{{ file.name }}</code><span>{{ file.description }}</span><small>{{ formatBytes(file.bytes) }}</small></div>
+            </div>
+            <div class="diagnostic-redactions">
+              <strong>{{ t('redactionsApplied') }}</strong>
+              <div v-if="diagnosticPreview.redactions.length" class="redaction-pills"><span v-for="item in diagnosticPreview.redactions" :key="item.kind">{{ item.kind }} · {{ item.count }}</span></div>
+              <p v-else class="muted">{{ t('noSensitiveValuesFound') }}</p>
+              <small>{{ diagnosticPreview.eventCount }} {{ t('recentEventsIncluded') }}</small>
+            </div>
+          </div>
+          <div class="diagnostic-actions">
+            <button class="primary" :disabled="preparingDiagnostics" @click="exportDiagnostics">{{ t('exportDiagnosticBundle') }}</button>
+            <button v-if="diagnosticArtifact" class="secondary" @click="openIssueHelper()">{{ t('openIssueHelper') }}</button>
+            <span v-if="diagnosticArtifact" class="muted">{{ diagnosticArtifact.name }}</span>
           </div>
         </section>
         <section class="terminal">
