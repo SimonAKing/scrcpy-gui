@@ -8,6 +8,7 @@ import {
   validateDeviceAddress,
   validatePortRange
 } from '../src/main/scrcpy'
+import { isTrustedRendererUrl, PRODUCTION_CSP } from '../src/main/security'
 
 function config(overrides: Partial<LaunchConfig> = {}): LaunchConfig {
   return {
@@ -171,5 +172,31 @@ describe('splitExtraArgs', () => {
 
   it('prevents callers from overriding the selected device', () => {
     expect(() => splitExtraArgs('--serial=other-device')).toThrow('cannot be overridden')
+  })
+})
+
+describe('renderer security boundary', () => {
+  const packagedEntry = 'file:///Applications/Scrcpy%20GUI.app/Contents/Resources/app.asar/out/renderer/index.html'
+
+  it('accepts only the packaged renderer entry and its hash routes', () => {
+    expect(isTrustedRendererUrl(packagedEntry, packagedEntry)).toBe(true)
+    expect(isTrustedRendererUrl(`${packagedEntry}#devices`, packagedEntry)).toBe(true)
+    expect(isTrustedRendererUrl(`${packagedEntry}?redirect=https://example.com`, packagedEntry)).toBe(false)
+    expect(isTrustedRendererUrl('file:///tmp/index.html', packagedEntry)).toBe(false)
+    expect(isTrustedRendererUrl('https://example.com', packagedEntry)).toBe(false)
+  })
+
+  it('accepts only the configured development origin', () => {
+    const devUrl = 'http://localhost:5173/'
+    expect(isTrustedRendererUrl('http://localhost:5173/settings', packagedEntry, devUrl)).toBe(true)
+    expect(isTrustedRendererUrl('http://localhost:5174/', packagedEntry, devUrl)).toBe(false)
+    expect(isTrustedRendererUrl('https://localhost:5173/', packagedEntry, devUrl)).toBe(false)
+    expect(isTrustedRendererUrl('not a url', packagedEntry, devUrl)).toBe(false)
+  })
+
+  it('uses a production CSP without localhost network access', () => {
+    expect(PRODUCTION_CSP).toContain("connect-src 'self'")
+    expect(PRODUCTION_CSP).toContain("object-src 'none'")
+    expect(PRODUCTION_CSP).not.toContain('localhost')
   })
 })
