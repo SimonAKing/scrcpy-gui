@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/SimonAKing/scrcpy-gui/actions/workflows/validate.yml"><img src="https://github.com/SimonAKing/scrcpy-gui/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
-  <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/v/release/SimonAKing/scrcpy-gui?include_prereleases&style=flat-square" alt="最新版本"></a>
+  <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/v/release/SimonAKing/scrcpy-gui?style=flat-square" alt="最新稳定版"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/downloads/SimonAKing/scrcpy-gui/total.svg?style=flat-square" alt="下载量"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/SimonAKing/scrcpy-gui?style=flat-square" alt="GPL-3.0"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat-square" alt="欢迎贡献"></a>
@@ -15,7 +15,7 @@
 
 Scrcpy GUI 可以发现通过 USB 或无线调试连接的 Android 设备，并通过可靠的图形配置启动 [scrcpy](https://github.com/Genymobile/scrcpy)。它支持同时投屏多台设备、录制、音频、现代键盘模式、画面裁剪、窗口布局和当前 scrcpy 4.x 命令行参数。
 
-> 2.0 是一次从底层重建的现代化版本，目前处于 Beta。反馈回归问题时，请附上「日志」页内容、操作系统和 scrcpy 版本。
+> 2.4 是从底层重建后的首个正式稳定版。反馈回归问题时，请附上「日志」页内容、操作系统和 scrcpy 版本。
 
 ## 界面
 
@@ -72,7 +72,9 @@ scrcpy 是 Genymobile 维护的高性能轻量工具。它可以通过 USB 或 T
 - **macOS：**Intel 或 Apple 芯片版本的 `.dmg` / `.zip`
 - **Linux：**`.AppImage`、Debian（`.deb`）、Arch（`.pacman`）或免安装 `.tar.gz`
 
-当前 Beta 构建尚未进行代码签名或公证，操作系统可能会要求你确认信任该应用。
+当前正式版构建尚未进行代码签名或公证，操作系统可能会要求你确认信任该应用。打开前请使用 Release 中的 `SHA256SUMS.txt` 校验下载文件。
+
+本次实际执行的自动检查，以及尚未验证的硬件/安装矩阵，记录在 [v2.4.0 Release smoke 报告](docs/RELEASE_SMOKE_V2.4.0.md)中。
 
 ### 使用其他 scrcpy 安装
 

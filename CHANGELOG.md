@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.4.0
+
+This is the first stable release of the rebuilt Scrcpy GUI. It completes the M0–M4 software roadmap with the scrcpy 4.1 scene model, device workspace, local diagnostics, device groups, and bounded multi-device automation. See the release smoke report for the hardware, signing, and installer verification gaps that remain explicit rather than inferred.
+
 ### Added
 
 - Model Camera, Virtual display, Record-only, Control-only, and OTG as validated launch scenes with official scrcpy 4.1 argv serialization, explicit conflicts, and portable Profile support.

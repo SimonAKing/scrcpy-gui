@@ -1,6 +1,6 @@
 {
   "name": "scrcpy-gui",
-  "version": "2.0.0-beta.6",
+  "version": "2.4.0",
   "description": "A modern, secure desktop GUI for scrcpy",
   "author": "Simon Ma <simon@tomotoes.com>",
   "homepage": "https://github.com/SimonAKing/scrcpy-gui",
@@ -23,6 +23,7 @@
     "icons:generate": "node scripts/generate-icons.mjs",
     "icons:check": "node scripts/generate-icons.mjs --check",
     "prepare:scrcpy": "node scripts/fetch-scrcpy.mjs",
+    "smoke:packaged-runtime": "node scripts/smoke-packaged-runtime.mjs",
     "build:dir": "npm run build && npm run prepare:scrcpy && electron-builder --dir",
     "dist": "npm run build && npm run prepare:scrcpy && electron-builder --publish never",
     "dist:mac": "npm run build && node scripts/fetch-scrcpy.mjs darwin && electron-builder --mac --x64 --arm64 --publish never",

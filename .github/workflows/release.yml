@@ -37,6 +37,8 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: ${{ matrix.command }}
+      - name: Smoke packaged bundled runtime
+        run: npm run smoke:packaged-runtime
       - name: Build Chocolatey package
         if: runner.os == 'Windows'
         shell: pwsh
@@ -70,11 +72,21 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
+      - name: Generate SHA-256 manifest
+        shell: bash
+        run: |
+          find artifacts -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            | awk '{ name=$2; sub(/^.*\//, "", name); print $1 "  " name }' \
+            | sort -k2 > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v3
         with:
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
-          files: artifacts/**/*
+          files: |
+            artifacts/**/*
+            SHA256SUMS.txt
 
   publish-chocolatey:
     needs: [package, publish]
