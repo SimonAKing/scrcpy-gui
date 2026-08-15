@@ -8,6 +8,82 @@ import { defaultPersistedConfig } from '../src/shared/config'
 const temporaryDirectories: string[] = []
 const fixedNow = new Date('2026-08-15T12:00:00.000Z')
 
+// These persisted shapes come from the tagged AppV2.vue/default config implementations:
+// beta.1 blob 3ae2712e, beta.2 blob 5c5c9bff, beta.3 blob 5ac1a31a.
+// beta.2 and beta.3 share the same PersistedConfig type blob (55426146), but both tags
+// remain explicit cases so a release exit condition is not represented by one generic fixture.
+const taggedBetaConfigs = [
+  {
+    tag: 'v2.0.0-beta.1',
+    value: {
+      runtime: { scrcpyPath: '/tools/beta-1/scrcpy' }, locale: 'ru', muteNotifications: true, minimizeToTray: true,
+      launch: {
+        windowTitle: 'Beta 1 phone', videoBitRate: 16, maxSize: 1440, maxFps: 30, orientation: '90',
+        videoCodec: 'h265', shortcutModifier: 'lalt', keyboardMode: 'uhid', alwaysOnTop: true,
+        control: true, audio: false, turnScreenOff: true, stayAwake: true, showTouches: true,
+        fullscreen: false, borderless: true, recordEnabled: true, recordPath: '/tmp/beta-1.mp4', noPlayback: true,
+        crop: { x: 4, y: 8, width: 1080, height: 1920 }, window: { x: 20, y: 30, width: 600, height: 900 },
+        extraArgs: '--power-off-on-close'
+      }
+    },
+    expected: {
+      runtime: { scrcpyPath: '/tools/beta-1/scrcpy' }, locale: 'ru', muteNotifications: true, minimizeToTray: true,
+      launch: {
+        windowTitle: 'Beta 1 phone', videoBitRate: 16, maxSize: 1440, maxFps: 30, orientation: '90',
+        videoCodec: 'h265', shortcutModifier: 'lalt', keyboardMode: 'uhid', alwaysOnTop: true,
+        audio: false, turnScreenOff: true, stayAwake: true, showTouches: true, borderless: true,
+        recordEnabled: true, recordPath: '/tmp/beta-1.mp4', noPlayback: true,
+        crop: { x: 4, y: 8, width: 1080, height: 1920 }, window: { x: 20, y: 30, width: 600, height: 900 },
+        extraArgs: '--power-off-on-close'
+      }
+    }
+  },
+  ...(['v2.0.0-beta.2', 'v2.0.0-beta.3'] as const).map((tag, index) => ({
+    tag,
+    value: {
+      runtime: { scrcpyPath: `/tools/beta-${index + 2}/scrcpy` }, locale: index ? 'zh-TW' : 'zh-CN',
+      muteNotifications: Boolean(index), minimizeToTray: true, killAdbOnQuit: true,
+      bossKeyEnabled: true, bossKeyAccelerator: 'CommandOrControl+Alt+B', autoSelectFirstDevice: false,
+      autoLaunchDevices: { 'BETA-DEVICE': true },
+      launch: {
+        windowTitle: `${tag} phone`, videoBitRate: 24, videoBuffer: 40, audioBuffer: 80,
+        maxSize: 1920, maxFps: 60, displayId: 2, orientation: '180', videoCodec: 'h264',
+        shortcutModifier: 'ralt', keyboardMode: 'uhid', mouseMode: 'uhid', gamepadMode: 'uhid',
+        alwaysOnTop: true, control: true, audio: true, turnScreenOff: false, stayAwake: true,
+        showTouches: false, fullscreen: true, borderless: false, windowAspectRatioLock: false,
+        pushTarget: '/sdcard/Download', tunnelPort: '27183:27199', recordEnabled: true,
+        recordPath: `/tmp/${tag}.mkv`, autoRecordName: true, recordDirectory: '/tmp/recordings', noPlayback: false,
+        crop: { x: 1, y: 2, width: 720, height: 1280 }, window: { x: 40, y: 50, width: 720, height: 1280 },
+        extraArgs: '--disable-screensaver'
+      },
+      profiles: [{ id: `profile-${index}`, name: `Profile ${index}`, launch: { maxFps: 90, videoCodec: 'h265' } }],
+      deviceProfiles: { 'BETA-DEVICE': `profile-${index}` }, deviceAliases: { 'BETA-DEVICE': `Beta device ${index}` },
+      wirelessTargets: [{ id: `wifi-${index}`, name: 'Lab phone', address: '192.168.1.9:5555', autoConnect: true }],
+      automations: [{ id: `macro-${index}`, name: 'Home', steps: [{ action: 'home', delayMs: 120 }] }]
+    },
+    expected: {
+      runtime: { scrcpyPath: `/tools/beta-${index + 2}/scrcpy` }, locale: index ? 'zh-TW' : 'zh-CN',
+      minimizeToTray: true, killAdbOnQuit: true, bossKeyEnabled: true,
+      bossKeyAccelerator: 'CommandOrControl+Alt+B', autoSelectFirstDevice: false,
+      autoLaunchDevices: { 'BETA-DEVICE': true }, deviceAliases: { 'BETA-DEVICE': `Beta device ${index}` },
+      deviceProfiles: { 'BETA-DEVICE': `profile-${index}` },
+      launch: {
+        windowTitle: `${tag} phone`, videoBitRate: 24, videoBuffer: 40, audioBuffer: 80,
+        maxSize: 1920, maxFps: 60, displayId: 2, orientation: '180', videoCodec: 'h264',
+        shortcutModifier: 'ralt', keyboardMode: 'uhid', mouseMode: 'uhid', gamepadMode: 'uhid',
+        alwaysOnTop: true, stayAwake: true, fullscreen: true, windowAspectRatioLock: false,
+        pushTarget: '/sdcard/Download', tunnelPort: '27183:27199', recordEnabled: true,
+        recordPath: `/tmp/${tag}.mkv`, autoRecordName: true, recordDirectory: '/tmp/recordings',
+        crop: { x: 1, y: 2, width: 720, height: 1280 }, window: { x: 40, y: 50, width: 720, height: 1280 },
+        extraArgs: '--disable-screensaver'
+      },
+      profiles: [{ id: `profile-${index}`, name: `Profile ${index}`, launch: { maxFps: 90, videoCodec: 'h265' } }],
+      wirelessTargets: [{ id: `wifi-${index}`, name: 'Lab phone', address: '192.168.1.9:5555', autoConnect: true }],
+      automations: [{ id: `macro-${index}`, name: 'Home' }]
+    }
+  }))
+]
+
 async function repository(): Promise<{ directory: string; store: ConfigRepository }> {
   const directory = await mkdtemp(join(tmpdir(), 'scrcpy-gui-config-'))
   temporaryDirectories.push(directory)
@@ -19,6 +95,15 @@ afterEach(async () => {
 })
 
 describe('ConfigRepository', () => {
+  it.each(taggedBetaConfigs)('migrates the persisted $tag shape without losing supported values', async ({ value, expected }) => {
+    const { directory, store } = await repository()
+    const loaded = await store.load(JSON.stringify(value), 'en')
+
+    expect(loaded.migration.source).toBe('legacy-v2')
+    expect(loaded.config).toMatchObject(expected)
+    expect(JSON.parse(await readFile(join(directory, 'config.json'), 'utf8'))).toMatchObject({ schemaVersion: 3, revision: 1 })
+  })
+
   it('migrates valid beta config item-by-item without persisting a bundled absolute path', async () => {
     const { directory, store } = await repository()
     const legacy = {
