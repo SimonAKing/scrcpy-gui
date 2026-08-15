@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, open, readFile, rename, rm, stat, unlink } from 'node:fs/promises'
+import { mkdir, open, rename, rm, stat, unlink } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import type {
   ArtifactKind,
@@ -12,6 +12,7 @@ import type {
   ApkInstallResult,
   ScrcpySession
 } from '../shared/types'
+import { readBoundedRegularUtf8File } from './safeFile'
 
 interface ArtifactIndex {
   schemaVersion: 1
@@ -224,9 +225,11 @@ export class ArtifactService {
     await mkdir(this.directory, { recursive: true })
     let contents: string
     try {
-      const info = await stat(this.indexPath)
-      if (!info.isFile() || info.size > MAX_INDEX_BYTES) return
-      contents = await readFile(this.indexPath, 'utf8')
+      contents = await readBoundedRegularUtf8File(
+        this.indexPath,
+        MAX_INDEX_BYTES,
+        'Artifact index must be a regular file no larger than 4 MiB.'
+      )
     } catch {
       return
     }

@@ -48,11 +48,12 @@ for (const artifact of selected) {
   if (actualHash !== artifact.sha256) throw new Error(`Checksum mismatch for ${artifact.file}.`)
 
   const temporary = await mkdtemp(join(tmpdir(), 'scrcpy-gui-bundle-'))
-  const archivePath = join(temporary, artifact.file)
   const extracted = join(temporary, 'extracted')
   await mkdir(extracted)
-  await writeFile(archivePath, archive)
-  const result = spawnSync('tar', ['-xf', archivePath, '-C', extracted, '--strip-components=1'], { stdio: 'inherit' })
+  const result = spawnSync('tar', ['-xf', '-', '-C', extracted, '--strip-components=1'], {
+    input: archive,
+    stdio: ['pipe', 'inherit', 'inherit']
+  })
   if (result.status !== 0) throw new Error(`Could not extract ${artifact.file}.`)
 
   await writeFile(join(extracted, '.scrcpy-bundle'), `${VERSION} ${artifact.sha256}\n`)

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { constants } from 'node:fs'
-import { access, copyFile, mkdir, open, readFile, rename, rm, stat } from 'node:fs/promises'
+import { access, copyFile, mkdir, open, rename, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type {
   AppConfigV3,
@@ -22,6 +22,7 @@ import { configView, defaultPersistedConfig, legacyConfigView } from '../shared/
 import { automationMacro, boundedString, launchConfig, runtimeConfig, strictBoolean } from './ipcValidation'
 import { validateDeviceAddress } from './scrcpy'
 import { failureFromUnknown, operationFailure } from '../shared/errors'
+import { readBoundedRegularUtf8File } from './safeFile'
 
 const MAX_CONFIG_BYTES = 2 * 1024 * 1024
 const MAX_COLLECTION_SIZE = 1_000
@@ -452,9 +453,11 @@ export class ConfigRepository {
   private async readValidated(path: string): Promise<AppConfigV3 | undefined> {
     let contents: string
     try {
-      const info = await stat(path)
-      if (!info.isFile() || info.size > MAX_CONFIG_BYTES) return undefined
-      contents = await readFile(path, 'utf8')
+      contents = await readBoundedRegularUtf8File(
+        path,
+        MAX_CONFIG_BYTES,
+        'Configuration must be a regular file no larger than 2 MiB.'
+      )
     } catch {
       return undefined
     }
