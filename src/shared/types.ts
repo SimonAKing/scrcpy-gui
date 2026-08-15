@@ -141,6 +141,8 @@ export interface AutomationMacro {
   steps: AutomationStep[]
 }
 
+export type Locale = 'en' | 'zh-CN' | 'zh-TW' | 'ru'
+
 export interface PersistedConfig {
   runtime: RuntimeConfig
   launch: LaunchConfig
@@ -149,7 +151,7 @@ export interface PersistedConfig {
   deviceAliases: Record<string, string>
   wirelessTargets: WirelessTarget[]
   automations: AutomationMacro[]
-  locale: 'en' | 'zh-CN' | 'zh-TW' | 'ru'
+  locale: Locale
   muteNotifications: boolean
   minimizeToTray: boolean
   killAdbOnQuit: boolean
@@ -157,6 +159,72 @@ export interface PersistedConfig {
   bossKeyAccelerator: string
   autoSelectFirstDevice: boolean
   autoLaunchDevices: Record<string, boolean>
+}
+
+export interface KnownDevice {
+  id: string
+  lastSerial: string
+  alias: string
+  model: string
+  lastConnection: 'usb' | 'wireless'
+  defaultProfileId?: string
+  groupIds: string[]
+  autoConnect: boolean
+  autoLaunch: boolean
+  firstSeenAt: string
+  lastSeenAt: string
+}
+
+export interface DeviceGroup {
+  id: string
+  name: string
+  deviceIds: string[]
+}
+
+export interface AppConfigV3 {
+  schemaVersion: 3
+  revision: number
+  locale: Locale
+  appearance: {
+    muteNotifications: boolean
+  }
+  runtime: {
+    mode: 'bundled' | 'custom'
+    customScrcpyPath: string
+  }
+  defaults: {
+    launch: LaunchConfig
+    minimizeToTray: boolean
+    killAdbOnQuit: boolean
+    autoSelectFirstDevice: boolean
+  }
+  shortcuts: {
+    bossKeyEnabled: boolean
+    bossKeyAccelerator: string
+  }
+  knownDevices: KnownDevice[]
+  profiles: LaunchProfile[]
+  wirelessTargets: WirelessTarget[]
+  automations: AutomationMacro[]
+  groups: DeviceGroup[]
+}
+
+export interface ConfigMigrationReport {
+  source: 'existing-v3' | 'legacy-v2' | 'defaults' | 'backup'
+  imported: number
+  skipped: number
+  invalid: number
+}
+
+export interface ConfigLoadResult {
+  config: PersistedConfig
+  revision: number
+  migration: ConfigMigrationReport
+}
+
+export interface ConfigSaveResult {
+  config: PersistedConfig
+  revision: number
 }
 
 export interface EnvironmentStatus {
@@ -215,6 +283,8 @@ export interface ScrcpyApi {
   chooseScrcpy(): Promise<string>
   chooseRecordPath(): Promise<string>
   chooseRecordDirectory(): Promise<string>
+  loadConfig(legacyJson: string, locale: Locale): Promise<ConfigLoadResult>
+  saveConfig(revision: number, config: PersistedConfig): Promise<OperationResult<ConfigSaveResult>>
   getEnvironment(runtime: RuntimeConfig): Promise<EnvironmentStatus>
   listDevices(runtime: RuntimeConfig): Promise<OperationResult<Device[]>>
   connect(runtime: RuntimeConfig, target: string): Promise<OperationResult<string>>

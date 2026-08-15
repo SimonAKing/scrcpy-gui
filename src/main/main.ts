@@ -5,7 +5,9 @@ import type {
   AutomationStep,
   DeviceControlAction,
   DeviceLaunch,
+  Locale,
   OperationResult,
+  PersistedConfig,
   RuntimeConfig,
   ScrcpySessionEvent,
   ScrcpyStatusEvent
@@ -33,11 +35,13 @@ import {
   controlAction,
   deviceLaunches,
   deviceSerial,
+  nonNegativeInteger,
   runtimeConfig,
   strictBoolean
 } from './ipcValidation'
 import { isTrustedRendererUrl, PRODUCTION_CSP } from './security'
 import { buildScrcpyArgs } from './scrcpy'
+import { ConfigRepository } from './configRepository'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -47,6 +51,7 @@ let registeredBossKey = ''
 let killAdbOnQuit = false
 let quitRuntime: RuntimeConfig = { scrcpyPath: '' }
 let shutdownStarted = false
+let configRepository: ConfigRepository | undefined
 const rendererEntryUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
 
 function rendererUrlIsTrusted(url: string): boolean {
@@ -229,6 +234,16 @@ handle('dialog:record-directory', async () => {
   })
   return result.canceled ? '' : result.filePaths[0] || ''
 })
+handle('config:load', (_event, legacyJson: string, requestedLocale: Locale) => {
+  const legacy = boundedString(legacyJson, 'legacy config', 2 * 1024 * 1024, true)
+  if (!['en', 'zh-CN', 'zh-TW', 'ru'].includes(requestedLocale)) throw new TypeError('locale is not supported.')
+  if (!configRepository) throw new Error('Configuration repository is not ready.')
+  return configRepository.load(legacy, requestedLocale)
+})
+handle('config:save', (_event, revision: number, config: PersistedConfig) => {
+  if (!configRepository) throw new Error('Configuration repository is not ready.')
+  return configRepository.save(nonNegativeInteger(revision, 'config revision'), config)
+})
 handle('system:environment', (_event, runtime: RuntimeConfig) => getEnvironment(runtimeConfig(runtime)))
 handle('device:list', (_event, runtime: RuntimeConfig) => listDevices(runtimeConfig(runtime)))
 handle('device:connect', (_event, runtime: RuntimeConfig, target: string) =>
@@ -293,6 +308,7 @@ handle('shell:open', async (_event, rawUrl: string) => {
 })
 
 app.whenReady().then(() => {
+  configRepository = new ConfigRepository(app.getPath('userData'))
   configureSessionSecurity()
   createWindow()
   createTray()
