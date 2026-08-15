@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -57,7 +57,7 @@ for (const artifact of selected) {
 
   await writeFile(join(extracted, '.scrcpy-bundle'), `${VERSION} ${artifact.sha256}\n`)
   await rm(destination, { recursive: true, force: true })
-  await rename(extracted, destination)
+  await cp(extracted, destination, { recursive: true })
   await rm(temporary, { recursive: true, force: true })
   console.log(`Prepared verified scrcpy ${VERSION} bundle for ${artifact.arch}.`)
 }

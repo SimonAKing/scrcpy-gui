@@ -31,6 +31,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes libarchive-tools
       - run: npm ci
       - run: npm test
       - run: ${{ matrix.command }}
