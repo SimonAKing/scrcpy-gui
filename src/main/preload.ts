@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AutomationStep,
+  AppEvent,
+  AppEventQuery,
   CommandPreviewRequest,
   DeviceControlAction,
   DeviceLaunch,
@@ -15,6 +17,8 @@ import type {
 
 const api: ScrcpyApi = {
   getVersion: () => ipcRenderer.invoke('app:version'),
+  listEvents: (query: AppEventQuery) => ipcRenderer.invoke('events:list', query),
+  clearEvents: () => ipcRenderer.invoke('events:clear'),
   chooseScrcpy: () => ipcRenderer.invoke('dialog:scrcpy'),
   chooseRecordPath: () => ipcRenderer.invoke('dialog:record'),
   chooseRecordDirectory: () => ipcRenderer.invoke('dialog:record-directory'),
@@ -59,6 +63,11 @@ const api: ScrcpyApi = {
     const listener = (_event: Electron.IpcRendererEvent, deviceEvent: DeviceTrackerEvent): void => callback(deviceEvent)
     ipcRenderer.on('device:event', listener)
     return () => ipcRenderer.removeListener('device:event', listener)
+  },
+  onEvent: (callback: (event: AppEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, appEvent: AppEvent): void => callback(appEvent)
+    ipcRenderer.on('app:event', listener)
+    return () => ipcRenderer.removeListener('app:event', listener)
   }
 }
 

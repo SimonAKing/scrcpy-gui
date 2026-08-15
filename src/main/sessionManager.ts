@@ -8,6 +8,7 @@ import type {
   SessionState,
   SessionStopReason
 } from '../shared/types'
+import { operationFailure } from '../shared/errors'
 
 export interface SessionLaunchRequest {
   executable: string
@@ -186,7 +187,7 @@ export class ScrcpySessionManager {
     const session = this.sessions.get(id)
     const active = this.active.get(id)
     if (!session || !active || TERMINAL_STATES.has(session.state)) {
-      return { ok: false, error: 'No active scrcpy session found.' }
+      return operationFailure('SESSION_NOT_ACTIVE', 'session-stop', 'No active scrcpy session found.')
     }
     if (session.state !== 'stopping') {
       session.stopReason = reason
@@ -201,7 +202,11 @@ export class ScrcpySessionManager {
 
   stopBySerial(serial: string, reason: SessionStopReason = 'user'): OperationResult {
     const id = this.activeConflicts.get(conflictKey(serial.trim(), 'screen'))
-    return id ? this.stop(id, reason) : { ok: false, error: 'No running scrcpy process found for this device.' }
+    return id ? this.stop(id, reason) : operationFailure(
+      'SESSION_NOT_ACTIVE',
+      'session-stop',
+      'No running scrcpy process found for this device.'
+    )
   }
 
   stopAll(reason: SessionStopReason = 'app-quit'): void {
