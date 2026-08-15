@@ -192,7 +192,6 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Bu
 ## Community and credits
 
 - Questions, bugs, and feature requests: [GitHub Issues](https://github.com/SimonAKing/scrcpy-gui/issues)
-- Chinese community: [Scrcpy-GUI QQ group](https://jq.qq.com/?_wv=1027&k=5jxRe2o)
 - The Russian translation was originally contributed by [@dEN5-tech](https://github.com/dEN5-tech) in [#69](https://github.com/SimonAKing/scrcpy-gui/pull/69) and migrated to the 2.0 interface.
 - Thanks to [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) and every Scrcpy GUI contributor.
 
