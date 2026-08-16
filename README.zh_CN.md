@@ -9,7 +9,7 @@
   <a href="https://github.com/SimonAKing/scrcpy-gui/actions/workflows/validate.yml"><img src="https://github.com/SimonAKing/scrcpy-gui/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/v/release/SimonAKing/scrcpy-gui?style=flat-square" alt="最新稳定版"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/releases"><img src="https://img.shields.io/github/downloads/SimonAKing/scrcpy-gui/total.svg?style=flat-square" alt="下载量"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/SimonAKing/scrcpy-gui?style=flat-square" alt="GPL-3.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/SimonAKing/scrcpy-gui?style=flat-square" alt="MIT"></a>
   <a href="https://github.com/SimonAKing/scrcpy-gui/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat-square" alt="欢迎贡献"></a>
 </p>
 
@@ -201,7 +201,6 @@ npm run build:dir
 
 - 问题、Bug 与功能建议：[GitHub Issues](https://github.com/SimonAKing/scrcpy-gui/issues)
 - 安全漏洞：请按 [SECURITY.md](SECURITY.md) 私下报告，不要提交公开 issue
-- 俄语翻译最初由 [@dEN5-tech](https://github.com/dEN5-tech) 在 [#69](https://github.com/SimonAKing/scrcpy-gui/pull/69) 中贡献，并已迁移到 2.0 界面。
 - 感谢 [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) 以及 Scrcpy GUI 的所有贡献者。
 
 ## 支持项目
@@ -210,4 +209,4 @@ npm run build:dir
 
 ## 许可证
 
-Scrcpy GUI 使用 [GNU GPLv3](LICENSE)。scrcpy 是独立项目，遵循其自身许可证。
+Scrcpy GUI 自 v2.4.2 起使用 [MIT License](LICENSE)。v2.4.1 及更早的已发布版本继续遵循其发布时附带的 GPL-3.0-only 许可。内置 scrcpy 仍是遵循其自身许可证的独立项目，详见[第三方声明](THIRD_PARTY_NOTICES.md)。

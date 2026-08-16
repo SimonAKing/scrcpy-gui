@@ -1,10 +1,11 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const projectRoot = resolve(import.meta.dirname, '..')
 const releaseDirectory = join(projectRoot, 'release')
+const packageVersion = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8')).version
 const archiveSuffix = process.platform === 'darwin'
   ? `-mac-${process.arch}.zip`
   : process.platform === 'win32'
@@ -31,8 +32,8 @@ function run(executable, args, expected) {
 }
 
 const archive = (await readdir(releaseDirectory))
-  .find((name) => name.startsWith('Scrcpy.GUI-') && name.endsWith(archiveSuffix))
-if (!archive) throw new Error(`No current-architecture packaged archive matches *${archiveSuffix}.`)
+  .find((name) => name.startsWith(`Scrcpy.GUI-${packageVersion}-`) && name.endsWith(archiveSuffix))
+if (!archive) throw new Error(`No v${packageVersion} current-architecture packaged archive matches *${archiveSuffix}.`)
 
 const temporary = await mkdtemp(join(tmpdir(), 'scrcpy-gui-package-smoke-'))
 try {
@@ -44,7 +45,19 @@ try {
   const runtimeFile = (name) => files.find((path) => basename(path) === name && dirname(path).split(sep).includes('scrcpy'))
   const scrcpy = runtimeFile(executableName)
   const adb = runtimeFile(adbName)
-  if (!scrcpy || !adb) throw new Error('The packaged archive does not contain both scrcpy and adb under Resources/scrcpy.')
+  const runtimeLicense = runtimeFile(process.platform === 'win32' ? 'LICENSE.txt' : 'LICENSE')
+  const guiLicense = files.find((path) => basename(path) === 'LICENSE.scrcpy-gui.txt')
+  const thirdPartyNotices = files.find((path) => basename(path) === 'THIRD_PARTY_NOTICES.md')
+  if (!scrcpy || !adb || !runtimeLicense || !guiLicense || !thirdPartyNotices) {
+    throw new Error('The packaged archive does not contain scrcpy, adb, the upstream runtime license, the Scrcpy GUI license, and third-party notices.')
+  }
+  const [runtimeLicenseText, guiLicenseText] = await Promise.all([
+    readFile(runtimeLicense, 'utf8'),
+    readFile(guiLicense, 'utf8')
+  ])
+  if (!/Apache License\s+Version 2\.0/s.test(runtimeLicenseText) || !guiLicenseText.startsWith('MIT License\n')) {
+    throw new Error('The packaged archive does not preserve the expected scrcpy Apache-2.0 and Scrcpy GUI MIT license texts.')
+  }
   run(scrcpy, ['--version'], /^scrcpy\s+4\.1\b/im)
   run(adb, ['version'], /^Android Debug Bridge version\s+1\.0\.41\b/im)
   console.log(`Verified packaged runtime from ${archive}.`)

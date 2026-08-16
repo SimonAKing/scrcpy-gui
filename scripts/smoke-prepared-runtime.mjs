@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { readFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -6,6 +7,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const executable = process.platform === 'win32' ? 'scrcpy.exe' : 'scrcpy'
 const adbExecutable = process.platform === 'win32' ? 'adb.exe' : 'adb'
 const runtimeDirectory = join(projectRoot, 'vendor', `scrcpy-${process.arch}`)
+const licenseName = process.platform === 'win32' ? 'LICENSE.txt' : 'LICENSE'
 
 function run(name, args, expected) {
   const path = join(runtimeDirectory, name)
@@ -19,4 +21,6 @@ function run(name, args, expected) {
 
 run(executable, ['--version'], /^scrcpy\s+4\.1\b/im)
 run(adbExecutable, ['version'], /^Android Debug Bridge version\s+1\.0\.41\b/im)
+const licenseText = await readFile(join(runtimeDirectory, licenseName), 'utf8')
+if (!/Apache License\s+Version 2\.0/s.test(licenseText)) throw new Error('Prepared runtime is missing the expected scrcpy Apache-2.0 license.')
 console.log(`Verified prepared runtime in vendor/scrcpy-${process.arch}.`)
