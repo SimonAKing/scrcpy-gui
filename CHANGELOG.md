@@ -2,20 +2,26 @@
 
 ## Unreleased
 
+## 2.4.3
+
+- Accept both LF and Windows CRLF line endings when verifying the packaged MIT license.
+- Report project and upstream license verification failures separately.
+- Supersede the unpublished `v2.4.2` tag, whose release workflow correctly stopped before publication when the Windows-only line-ending check failed.
+
 ## 2.4.2
 
 This licensing and verification-tooling patch release applies the MIT License prospectively to Scrcpy GUI while preserving the separate licenses and notices of the bundled official scrcpy runtime. Releases through v2.4.1 remain under GPL-3.0-only.
 
 ### Changed
 
-- Replace the project license with the OSI-approved MIT text after auditing contribution provenance and obtaining the required contributor consent.
+- Replace the project license with the OSI-approved MIT text after completing the current-tree contribution audit and maintainer ownership attestation.
 - Package the Scrcpy GUI license and third-party notice as visible resources, and fail packaged-runtime smoke checks when either the GUI MIT text or bundled scrcpy Apache-2.0 text is missing.
 - Remove an unused legacy tray icon that was the only remaining current-tree artifact from an otherwise removed external contribution.
 - Add published installer lifecycle/startup verification, tagged beta migration fixtures, and a redacted physical-device preflight/runbook without claiming missing hardware results.
 
 ## 2.4.1
 
-This GPL-3.0-only patch release ships the security and release-provenance improvements completed after v2.4.0. The planned MIT change is not included and remains pending explicit consent for the migrated #69 Russian translation.
+This GPL-3.0-only patch release ships the security and release-provenance improvements completed after v2.4.0. The planned MIT change is not included and remained pending completion of the current-tree contribution audit.
 
 ### Fixed
 

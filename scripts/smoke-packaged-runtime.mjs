@@ -55,8 +55,11 @@ try {
     readFile(runtimeLicense, 'utf8'),
     readFile(guiLicense, 'utf8')
   ])
-  if (!/Apache License\s+Version 2\.0/s.test(runtimeLicenseText) || !guiLicenseText.startsWith('MIT License\n')) {
-    throw new Error('The packaged archive does not preserve the expected scrcpy Apache-2.0 and Scrcpy GUI MIT license texts.')
+  if (!/Apache License\s+Version 2\.0/s.test(runtimeLicenseText)) {
+    throw new Error('The packaged archive does not preserve the expected scrcpy Apache-2.0 license text.')
+  }
+  if (!/^MIT License\r?\n/.test(guiLicenseText)) {
+    throw new Error('The packaged archive does not preserve the expected Scrcpy GUI MIT license text.')
   }
   run(scrcpy, ['--version'], /^scrcpy\s+4\.1\b/im)
   run(adb, ['version'], /^Android Debug Bridge version\s+1\.0\.41\b/im)
