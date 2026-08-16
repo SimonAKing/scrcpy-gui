@@ -41,6 +41,16 @@ The final [`v2.4.1` Release workflow](https://github.com/SimonAKing/scrcpy-gui/a
 
 The optional Chocolatey Community job completed safely without a push because `CHOCO_API_KEY` is not configured. The verified `.nupkg` is attached to the GitHub release, while issue #139 remains open for real Community submission, moderation, and install/upgrade evidence.
 
+## Published installer lifecycle result
+
+The post-release [`v2.4.0` → `v2.4.1` installer lifecycle run](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31942357974) passed against the published assets:
+
+- macOS (17s): selected the runner-architecture DMG, installed v2.4.0 into `/Applications`, replaced it with v2.4.1, checked the bundle/runtime versions and production `file://` Renderer startup, then removed the app;
+- Ubuntu (45s): verified and installed the v2.4.0 Debian package, upgraded to v2.4.1, checked dpkg/runtime versions and Renderer startup under Xvfb, then removed the package;
+- Windows (2m16s): silently installed the v2.4.0 x64 NSIS package, upgraded to v2.4.1, checked registry/runtime versions and production Renderer startup, then ran the registered uninstaller and confirmed removal.
+
+Every v2.4.1 installer was matched to its published `SHA256SUMS.txt` entry before installation. This is hosted-runner native install/upgrade/startup/uninstall evidence; it does not replace manual interactive UX, signing reputation, preference-retention, or physical-device verification.
+
 ## Pre-publication correction
 
 The first tag attempt failed before creating any GitHub Release or assets: GNU tar required explicit gzip mode for streamed `.tar.gz` input, and Windows tar stdin extraction produced a runtime that failed DLL loading. PRs #202 and #203 fixed those platform-specific extraction paths, added a permanent Windows prepared-runtime gate, and passed three-platform validation plus CodeQL. The unpublished tag was then recreated on the verified fix commit before the successful workflow above. The original source state remains recoverable at commit `e372f45f559b5be6598700fc0a059267f0178375`.

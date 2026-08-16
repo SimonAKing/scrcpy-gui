@@ -16,8 +16,8 @@ Audit baseline: `master` after PR #203, 2026-08-16. This document treats missing
 | Official scrcpy download and SHA-256 | Complete | pinned scrcpy 4.1 hashes in `scripts/fetch-scrcpy.mjs`; [v2.4.1 release workflow](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31940894381) |
 | Stable, complete asset names | Complete | v2.4.1 has 16 assets: 14 platform/Chocolatey packages, SPDX SBOM, and manifest |
 | Execute packaged scrcpy/ADB | Complete | release jobs execute scrcpy 4.1 and ADB 1.0.41 from extracted final archives |
-| Installed GUI starts on three hosts | Complete | [published-asset lifecycle/startup run](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31892938302) loads the production `file://` Renderer on macOS, Windows, and Ubuntu/Xvfb |
-| Install, upgrade, uninstall | Complete for hosted native paths | the same run performs beta.6 → v2.4.0 lifecycle through DMG, NSIS, and Debian packages; interactive UX remains a disclosed manual gap |
+| Installed GUI starts on three hosts | Complete | [v2.4.0 → v2.4.1 published-asset lifecycle run](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31942357974) loads the production `file://` Renderer on macOS, Windows, and Ubuntu/Xvfb |
+| Install, upgrade, uninstall | Complete for hosted native paths | the same run verifies the v2.4.1 manifest and performs stable-to-patch lifecycle through DMG, NSIS, and Debian packages; interactive UX remains a disclosed manual gap |
 | Asset manifest and provenance | Complete | all 15 non-manifest assets match `SHA256SUMS.txt` and uploaded digests; strict SLSA verification covers all 16 assets |
 | Issue reply with release and verification | Complete where the request is fulfilled | #139 remains open because Community publication has not occurred; verified `.nupkg` files are attached to stable releases |
 
