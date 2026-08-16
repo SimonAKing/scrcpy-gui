@@ -1,6 +1,6 @@
 # Published installer lifecycle smoke
 
-The `Installer lifecycle smoke` workflow validates real GitHub Release assets rather than build-directory approximations. A maintainer supplies an already published previous version and current version; the default path is `v2.0.0-beta.6` → `v2.4.0`.
+The `Installer lifecycle smoke` workflow validates real GitHub Release assets rather than build-directory approximations. A maintainer supplies an already published previous version and current version; the default path is the latest verified stable upgrade, currently `v2.4.0` → `v2.4.1`.
 
 ## Covered paths
 
