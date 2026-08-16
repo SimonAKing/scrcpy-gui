@@ -4,7 +4,7 @@ v2.4.2 is a prospective licensing patch over the published GPL-3.0-only v2.4.1 s
 
 ## Required before tagging
 
-- explicit MIT consent for the migrated #69 Russian translation;
+- completed current-tree relicensing audit recorded in `RELICENSING_V2.4.2.md`;
 - `npm run typecheck`;
 - `npm test -- --run`;
 - `npm run build`;

@@ -201,7 +201,6 @@ The proposed product direction, functional requirements, architecture, security 
 
 - Questions, bugs, and feature requests: [GitHub Issues](https://github.com/SimonAKing/scrcpy-gui/issues)
 - Security vulnerabilities: follow the private process in [SECURITY.md](SECURITY.md), not a public issue
-- The Russian translation was originally contributed by [@dEN5-tech](https://github.com/dEN5-tech) in [#69](https://github.com/SimonAKing/scrcpy-gui/pull/69) and migrated to the 2.0 interface.
 - Thanks to [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) and every Scrcpy GUI contributor.
 
 ## Support the project

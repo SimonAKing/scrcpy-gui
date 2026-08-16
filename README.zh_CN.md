@@ -201,7 +201,6 @@ npm run build:dir
 
 - 问题、Bug 与功能建议：[GitHub Issues](https://github.com/SimonAKing/scrcpy-gui/issues)
 - 安全漏洞：请按 [SECURITY.md](SECURITY.md) 私下报告，不要提交公开 issue
-- 俄语翻译最初由 [@dEN5-tech](https://github.com/dEN5-tech) 在 [#69](https://github.com/SimonAKing/scrcpy-gui/pull/69) 中贡献，并已迁移到 2.0 界面。
 - 感谢 [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) 以及 Scrcpy GUI 的所有贡献者。
 
 ## 支持项目
