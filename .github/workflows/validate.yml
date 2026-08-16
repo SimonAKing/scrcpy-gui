@@ -26,6 +26,12 @@ jobs:
       - if: runner.os == 'Linux'
         run: npm run icons:check
       - run: npm run build
+      - name: Prepare official Windows runtime bundle
+        if: runner.os == 'Windows'
+        run: npm run prepare:scrcpy -- win32
+      - name: Smoke prepared Windows runtime bundle
+        if: runner.os == 'Windows'
+        run: npm run smoke:prepared-runtime
       - name: Validate Chocolatey metadata
         if: runner.os == 'Windows'
         run: choco pack packaging/chocolatey/scrcpy-gui.nuspec --version 0.0.0-ci --outputdirectory release
