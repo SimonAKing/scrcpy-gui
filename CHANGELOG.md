@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 2.4.1
+
+This GPL-3.0-only patch release ships the security and release-provenance improvements completed after v2.4.0. The planned MIT change is not included and remains pending explicit consent for the migrated #69 Russian translation.
+
 ### Security
 
 - Add private vulnerability-reporting guidance and weekly/push/PR CodeQL analysis for JavaScript and TypeScript.
