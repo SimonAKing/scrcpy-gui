@@ -6,6 +6,10 @@
 
 This GPL-3.0-only patch release ships the security and release-provenance improvements completed after v2.4.0. The planned MIT change is not included and remains pending explicit consent for the migrated #69 Russian translation.
 
+### Fixed
+
+- Explicitly select gzip decompression when streaming `.tar.gz` scrcpy bundles into GNU tar, while retaining ZIP extraction for Windows bundles.
+
 ### Security
 
 - Add private vulnerability-reporting guidance and weekly/push/PR CodeQL analysis for JavaScript and TypeScript.

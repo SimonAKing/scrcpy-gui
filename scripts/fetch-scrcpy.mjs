@@ -50,7 +50,8 @@ for (const artifact of selected) {
   const temporary = await mkdtemp(join(tmpdir(), 'scrcpy-gui-bundle-'))
   const extracted = join(temporary, 'extracted')
   await mkdir(extracted)
-  const result = spawnSync('tar', ['-xf', '-', '-C', extracted, '--strip-components=1'], {
+  const extractionMode = artifact.file.endsWith('.tar.gz') ? '-xzf' : '-xf'
+  const result = spawnSync('tar', [extractionMode, '-', '-C', extracted, '--strip-components=1'], {
     input: archive,
     stdio: ['pipe', 'inherit', 'inherit']
   })
