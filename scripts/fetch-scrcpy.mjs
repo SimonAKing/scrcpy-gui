@@ -54,10 +54,17 @@ for (const artifact of selected) {
   const temporary = await mkdtemp(join(tmpdir(), 'scrcpy-gui-bundle-'))
   const extracted = join(temporary, 'extracted')
   await mkdir(extracted)
-  const result = spawnSync('tar', ['-xf', '-', '-C', extracted, '--strip-components=1'], {
-    input: archive,
-    stdio: ['pipe', 'inherit', 'inherit']
-  })
+  const result = process.platform === 'win32' && artifact.file.endsWith('.zip')
+    ? spawnSync('powershell.exe', [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', join(projectRoot, 'scripts', 'extract-verified-zip.ps1'),
+        '-Destination', extracted,
+        '-ExpectedRoot', artifact.file.slice(0, -'.zip'.length)
+      ], { input: archive, stdio: ['pipe', 'inherit', 'inherit'], windowsHide: true })
+    : spawnSync('tar', [artifact.file.endsWith('.tar.gz') ? '-xzf' : '-xf', '-', '-C', extracted, '--strip-components=1'], {
+        input: archive,
+        stdio: ['pipe', 'inherit', 'inherit']
+      })
   if (result.status !== 0) throw new Error(`Could not extract ${artifact.file}.`)
 
   const licenseText = await readFile(join(extracted, 'LICENSE'), 'utf8')

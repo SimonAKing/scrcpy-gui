@@ -76,7 +76,7 @@ scrcpy 是 Genymobile 维护的高性能轻量工具。它可以通过 USB 或 T
 
 从 v2.4.1 起，Release 还会附带 SPDX SBOM 和 GitHub 构建来源证明。下载资产后，除核对 SHA-256 清单外，还可运行 `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` 验证其工作流来源。
 
-本次实际执行的自动检查，以及尚未验证的硬件/安装矩阵，记录在 [v2.4.0 Release smoke 报告](docs/RELEASE_SMOKE_V2.4.0.md)中。
+本次实际执行的自动检查、SBOM/来源证明和尚未验证的硬件矩阵，记录在 [v2.4.1 Release smoke 报告](docs/RELEASE_SMOKE_V2.4.1.md)中。此前三平台安装、升级和卸载证据仍保留在 [v2.4.0 报告](docs/RELEASE_SMOKE_V2.4.0.md)中。
 
 ### 使用其他 scrcpy 安装
 

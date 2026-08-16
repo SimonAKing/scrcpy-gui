@@ -13,6 +13,14 @@ This licensing and verification-tooling patch release applies the MIT License pr
 - Remove an unused legacy tray icon that was the only remaining current-tree artifact from an otherwise removed external contribution.
 - Add published installer lifecycle/startup verification, tagged beta migration fixtures, and a redacted physical-device preflight/runbook without claiming missing hardware results.
 
+## 2.4.1
+
+This GPL-3.0-only patch release ships the security and release-provenance improvements completed after v2.4.0. The planned MIT change is not included and remains pending explicit consent for the migrated #69 Russian translation.
+
+### Fixed
+
+- Use explicit gzip streaming for `.tar.gz` bundles and bounded in-memory .NET ZIP extraction on Windows, avoiding platform-specific stdin behavior while keeping verified network archives off disk.
+
 ### Security
 
 - Add private vulnerability-reporting guidance and weekly/push/PR CodeQL analysis for JavaScript and TypeScript.

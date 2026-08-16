@@ -24,6 +24,7 @@
     "icons:check": "node scripts/generate-icons.mjs --check",
     "prepare:scrcpy": "node scripts/fetch-scrcpy.mjs",
     "smoke:packaged-runtime": "node scripts/smoke-packaged-runtime.mjs",
+    "smoke:prepared-runtime": "node scripts/smoke-prepared-runtime.mjs",
     "smoke:hardware": "node scripts/hardware-smoke.mjs",
     "build:dir": "npm run build && npm run prepare:scrcpy && electron-builder --dir",
     "dist": "npm run build && npm run prepare:scrcpy && electron-builder --publish never",
