@@ -27,6 +27,24 @@ The tag workflow must independently:
 
 The release must stay unpublished if any required packaging, smoke, checksum, SBOM, or attestation step fails. Chocolatey Community publication remains an optional final job until `CHOCO_API_KEY` is configured.
 
+## Published result
+
+The final [`v2.4.1` Release workflow](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31940894381) passed every required job from the tag that peels to commit `8487b019e7bda281e0c2da1324ed8386eec51ce6`:
+
+- macOS, Windows, and Linux each completed tests, packaging, final-archive extraction, and packaged scrcpy 4.1 / ADB 1.0.41 execution;
+- Windows also built `scrcpy-gui.2.4.1.nupkg` with the final x64 installer checksum;
+- the published stable [v2.4.1 release](https://github.com/SimonAKing/scrcpy-gui/releases/tag/v2.4.1) contains 16 assets: 14 platform/Chocolatey packages, one SPDX SBOM, and `SHA256SUMS.txt`;
+- all 15 non-manifest assets are present in `SHA256SUMS.txt`, and every listed digest matches GitHub's uploaded-asset digest;
+- the SPDX 2.3 SBOM contains 466 packages;
+- strict `gh attestation verify` checks for the Chocolatey package, SBOM, and checksum manifest passed with the repository, `release.yml`, tag ref, source commit, and GitHub-hosted runner identity pinned;
+- the single SLSA provenance statement covers all 16 published assets and identifies `release.yml@refs/tags/v2.4.1` as its builder.
+
+The optional Chocolatey Community job completed safely without a push because `CHOCO_API_KEY` is not configured. The verified `.nupkg` is attached to the GitHub release, while issue #139 remains open for real Community submission, moderation, and install/upgrade evidence.
+
+## Pre-publication correction
+
+The first tag attempt failed before creating any GitHub Release or assets: GNU tar required explicit gzip mode for streamed `.tar.gz` input, and Windows tar stdin extraction produced a runtime that failed DLL loading. PRs #202 and #203 fixed those platform-specific extraction paths, added a permanent Windows prepared-runtime gate, and passed three-platform validation plus CodeQL. The unpublished tag was then recreated on the verified fix commit before the successful workflow above. The original source state remains recoverable at commit `e372f45f559b5be6598700fc0a059267f0178375`.
+
 ## Explicitly unverified
 
 - physical Android screen, audio, recording, pairing, multi-device, Camera, Virtual display, V4L2, Control-only, and OTG paths;

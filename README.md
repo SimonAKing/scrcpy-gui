@@ -76,7 +76,7 @@ The current stable artifacts are not code-signed or notarized. Your operating sy
 
 Releases from v2.4.1 also include an SPDX SBOM and GitHub build-provenance attestations. After downloading an asset, verify its workflow identity with `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` in addition to checking the SHA-256 manifest.
 
-The exact automated checks and unverified hardware/installer matrix are recorded in the [v2.4.0 release smoke report](docs/RELEASE_SMOKE_V2.4.0.md).
+The exact automated checks, SBOM/provenance evidence, and unverified hardware matrix are recorded in the [v2.4.1 release smoke report](docs/RELEASE_SMOKE_V2.4.1.md). The earlier three-platform install/upgrade/uninstall evidence remains in the [v2.4.0 report](docs/RELEASE_SMOKE_V2.4.0.md).
 
 ### Use another scrcpy installation
 

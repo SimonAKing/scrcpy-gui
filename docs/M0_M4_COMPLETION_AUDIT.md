@@ -1,6 +1,6 @@
 # M0–M4 completion audit
 
-Audit baseline: `master` after PR #196, 2026-08-15. This document treats missing direct evidence as incomplete; parser tests and CI are not substituted for physical-device results.
+Audit baseline: `master` after PR #203, 2026-08-16. This document treats missing direct evidence as incomplete; parser tests and CI are not substituted for physical-device results.
 
 ## Status vocabulary
 
@@ -12,14 +12,14 @@ Audit baseline: `master` after PR #196, 2026-08-15. This document treats missing
 
 | Requirement | Status | Authoritative evidence |
 | --- | --- | --- |
-| Unit/integration/typecheck/build on three hosts | Complete | Validate jobs on PR #196; 19 files / 177 tests after tagged migration coverage in #194 |
-| Official scrcpy download and SHA-256 | Complete | pinned scrcpy 4.1 hashes in `scripts/fetch-scrcpy.mjs`; [v2.4.0 release workflow](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31890315296) |
-| Stable, complete asset names | Complete | v2.4.0 has 15 assets across macOS, Windows, Linux, Chocolatey package, and manifest |
+| Unit/integration/typecheck/build on three hosts | Complete | [PR #203 validation](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31937865855); 21 files / 185 tests, build, prepared Windows runtime, and Chocolatey metadata |
+| Official scrcpy download and SHA-256 | Complete | pinned scrcpy 4.1 hashes in `scripts/fetch-scrcpy.mjs`; [v2.4.1 release workflow](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31940894381) |
+| Stable, complete asset names | Complete | v2.4.1 has 16 assets: 14 platform/Chocolatey packages, SPDX SBOM, and manifest |
 | Execute packaged scrcpy/ADB | Complete | release jobs execute scrcpy 4.1 and ADB 1.0.41 from extracted final archives |
 | Installed GUI starts on three hosts | Complete | [published-asset lifecycle/startup run](https://github.com/SimonAKing/scrcpy-gui/actions/runs/31892938302) loads the production `file://` Renderer on macOS, Windows, and Ubuntu/Xvfb |
 | Install, upgrade, uninstall | Complete for hosted native paths | the same run performs beta.6 → v2.4.0 lifecycle through DMG, NSIS, and Debian packages; interactive UX remains a disclosed manual gap |
-| Asset manifest | Complete | all 14 package entries matched `SHA256SUMS.txt` and uploaded digests |
-| Issue reply with release and verification | Complete where the request is fulfilled | #139 has a v2.4.0 reply but remains open because Community publication has not occurred |
+| Asset manifest and provenance | Complete | all 15 non-manifest assets match `SHA256SUMS.txt` and uploaded digests; strict SLSA verification covers all 16 assets |
+| Issue reply with release and verification | Complete where the request is fulfilled | #139 remains open because Community publication has not occurred; verified `.nupkg` files are attached to stable releases |
 
 ## M0 — stable baseline
 
@@ -29,7 +29,7 @@ Audit baseline: `master` after PR #196, 2026-08-15. This document treats missing
 - packaged-runtime smoke and installed-GUI lifecycle/startup smoke;
 - trusted IPC sender, payload, navigation, CSP, and contract coverage;
 - fake process launch/startup/exit/fatal/duplicate-session integration tests;
-- bug template, diagnostics, changelog, release notes, and stable v2.4.0 publication;
+- bug template, diagnostics, changelog, release notes, and stable v2.4.0 plus v2.4.1 publication;
 - explicit migration cases for the real persisted shapes in v2.0.0-beta.1, beta.2, and beta.3;
 - no open P0 issue; the only open issue is the Chocolatey enhancement #139.
 
