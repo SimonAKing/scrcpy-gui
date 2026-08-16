@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-## 2.4.1
+## 2.4.2
 
-This licensing and verification-tooling patch release applies the MIT License prospectively to Scrcpy GUI while preserving the separate licenses and notices of the bundled official scrcpy runtime. Releases through v2.4.0 remain under GPL-3.0-only.
+This licensing and verification-tooling patch release applies the MIT License prospectively to Scrcpy GUI while preserving the separate licenses and notices of the bundled official scrcpy runtime. Releases through v2.4.1 remain under GPL-3.0-only.
 
 ### Changed
 

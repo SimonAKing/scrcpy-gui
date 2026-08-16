@@ -210,4 +210,4 @@ npm run build:dir
 
 ## 许可证
 
-Scrcpy GUI 自 v2.4.1 起使用 [MIT License](LICENSE)。v2.4.0 及更早的已发布版本继续遵循其发布时附带的 GPL-3.0-only 许可。内置 scrcpy 仍是遵循其自身许可证的独立项目，详见[第三方声明](THIRD_PARTY_NOTICES.md)。
+Scrcpy GUI 自 v2.4.2 起使用 [MIT License](LICENSE)。v2.4.1 及更早的已发布版本继续遵循其发布时附带的 GPL-3.0-only 许可。内置 scrcpy 仍是遵循其自身许可证的独立项目，详见[第三方声明](THIRD_PARTY_NOTICES.md)。

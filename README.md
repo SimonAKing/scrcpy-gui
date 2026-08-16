@@ -210,4 +210,4 @@ If Scrcpy GUI is useful to you, starring the repository, reporting a reproducibl
 
 ## License
 
-Scrcpy GUI releases from v2.4.1 onward are licensed under the [MIT License](LICENSE). Tagged releases through v2.4.0 remain available under the GPL-3.0-only license that accompanied them. Bundled scrcpy remains a separate project under its own license; see [third-party notices](THIRD_PARTY_NOTICES.md).
+Scrcpy GUI releases from v2.4.2 onward are licensed under the [MIT License](LICENSE). Tagged releases through v2.4.1 remain available under the GPL-3.0-only license that accompanied them. Bundled scrcpy remains a separate project under its own license; see [third-party notices](THIRD_PARTY_NOTICES.md).

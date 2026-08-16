@@ -1,11 +1,11 @@
-# v2.4.1 relicensing record
+# v2.4.2 relicensing record
 
 This record explains the prospective Scrcpy GUI license change from GPL-3.0-only to MIT. It is an engineering provenance audit, not a claim that previously distributed copies changed license.
 
 ## Scope
 
-- Tagged releases through `v2.4.0` remain under the GPL-3.0-only terms shipped with those copies.
-- The MIT change applies to `v2.4.1` and later source/releases only after this change is merged.
+- Tagged releases through `v2.4.1` remain under the GPL-3.0-only terms shipped with those copies.
+- The MIT change applies to `v2.4.2` and later source/releases only after this change is merged.
 - The official scrcpy runtime bundled with release packages remains a separate Apache-2.0 project. Its upstream `LICENSE` file is preserved in each package.
 
 ## Current-tree contribution audit

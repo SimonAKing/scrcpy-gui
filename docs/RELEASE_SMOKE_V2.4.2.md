@@ -1,6 +1,6 @@
-# v2.4.1 Release verification
+# v2.4.2 Release verification
 
-v2.4.1 is a licensing and verification-tooling patch over v2.4.0. It does not claim new physical-device or scene coverage.
+v2.4.2 is a prospective licensing patch over the published GPL-3.0-only v2.4.1 security release. It does not claim new physical-device or scene coverage.
 
 ## Required before tagging
 
@@ -14,7 +14,7 @@ v2.4.1 is a licensing and verification-tooling patch over v2.4.0. It does not cl
 - packaged `scrcpy --version` and `adb version` checks remain successful;
 - the Release workflow publishes a checksummed SPDX 2.3 SBOM and GitHub/Sigstore attestations for the release assets.
 
-The physical-device, signing/notarization, manual installer, and Chocolatey Community gaps disclosed for v2.4.0 remain unchanged.
+The physical-device, signing/notarization, manual installer, and Chocolatey Community gaps disclosed for v2.4.1 remain unchanged.
 
 ## Verified locally before the pull request
 
@@ -23,7 +23,7 @@ The physical-device, signing/notarization, manual installer, and Chocolatey Comm
 - `npm run build`;
 - `npm run icons:check`: 11 assets;
 - unsigned macOS x64/arm64 packaging;
-- the v2.4.1 arm64 final ZIP contains both project notices and the upstream runtime license;
+- the v2.4.2 arm64 final ZIP contains both project notices and the upstream runtime license;
 - the same final ZIP executes packaged scrcpy 4.1 and ADB 1.0.41.
 
 ## Pull-request CI
