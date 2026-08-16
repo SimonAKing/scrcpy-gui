@@ -8,7 +8,7 @@ This GPL-3.0-only patch release ships the security and release-provenance improv
 
 ### Fixed
 
-- Explicitly select gzip decompression when streaming `.tar.gz` scrcpy bundles into GNU tar, while retaining ZIP extraction for Windows bundles.
+- Use explicit gzip streaming for `.tar.gz` bundles and bounded in-memory .NET ZIP extraction on Windows, avoiding platform-specific stdin behavior while keeping verified network archives off disk.
 
 ### Security
 
