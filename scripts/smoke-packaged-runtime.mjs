@@ -45,7 +45,7 @@ try {
   const runtimeFile = (name) => files.find((path) => basename(path) === name && dirname(path).split(sep).includes('scrcpy'))
   const scrcpy = runtimeFile(executableName)
   const adb = runtimeFile(adbName)
-  const runtimeLicense = runtimeFile('LICENSE')
+  const runtimeLicense = runtimeFile(process.platform === 'win32' ? 'LICENSE.txt' : 'LICENSE')
   const guiLicense = files.find((path) => basename(path) === 'LICENSE.scrcpy-gui.txt')
   const thirdPartyNotices = files.find((path) => basename(path) === 'THIRD_PARTY_NOTICES.md')
   if (!scrcpy || !adb || !runtimeLicense || !guiLicense || !thirdPartyNotices) {

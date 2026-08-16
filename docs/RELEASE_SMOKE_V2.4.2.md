@@ -10,7 +10,7 @@ v2.4.2 is a prospective licensing patch over the published GPL-3.0-only v2.4.1 s
 - `npm run build`;
 - macOS, Windows, and Linux PR checks;
 - CodeQL analysis with no open alert on the release revision;
-- final archives contain `LICENSE.scrcpy-gui.txt`, `THIRD_PARTY_NOTICES.md`, and the upstream `scrcpy/LICENSE`;
+- final archives contain `LICENSE.scrcpy-gui.txt`, `THIRD_PARTY_NOTICES.md`, and the platform-specific upstream scrcpy license file;
 - packaged `scrcpy --version` and `adb version` checks remain successful;
 - the Release workflow publishes a checksummed SPDX 2.3 SBOM and GitHub/Sigstore attestations for the release assets.
 

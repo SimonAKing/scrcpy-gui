@@ -9,6 +9,7 @@ const VERSION = '4.1'
 const RELEASE_BASE = `https://github.com/Genymobile/scrcpy/releases/download/v${VERSION}`
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const platform = process.argv[2] || process.platform
+const licenseName = platform === 'win32' ? 'LICENSE.txt' : 'LICENSE'
 
 const artifacts = {
   darwin: [
@@ -35,7 +36,7 @@ for (const artifact of selected) {
   try {
     const [markerText, licenseText] = await Promise.all([
       readFile(marker, 'utf8'),
-      readFile(join(destination, 'LICENSE'), 'utf8')
+      readFile(join(destination, licenseName), 'utf8')
     ])
     if (markerText.trim() === `${VERSION} ${artifact.sha256}` && /Apache License\s+Version 2\.0/s.test(licenseText)) {
       console.log(`scrcpy ${VERSION} ${artifact.arch} is ready.`)
@@ -67,7 +68,7 @@ for (const artifact of selected) {
       })
   if (result.status !== 0) throw new Error(`Could not extract ${artifact.file}.`)
 
-  const licenseText = await readFile(join(extracted, 'LICENSE'), 'utf8')
+  const licenseText = await readFile(join(extracted, licenseName), 'utf8')
   if (!/Apache License\s+Version 2\.0/s.test(licenseText)) {
     throw new Error(`The verified ${artifact.file} archive does not contain the expected scrcpy Apache-2.0 license.`)
   }
