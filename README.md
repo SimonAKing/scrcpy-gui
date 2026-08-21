@@ -132,7 +132,7 @@ Save selected devices as a Device group with a default launch profile and concur
 
 ### Recording
 
-Enable recording in Settings, choose an `.mp4` or `.mkv` destination, then launch the device. **No playback** records without showing a mirror window.
+Enable recording in Settings, choose an `.mp4` or `.mkv` destination, then launch the device. **No playback** records without showing a mirror window. Leaving the **Record only** scene restores playback defaults; recording explicitly enabled in Settings remains available for playback scenes.
 
 ### Extra arguments
 

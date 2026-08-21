@@ -41,7 +41,7 @@ import type {
   StructuredError,
   WirelessTarget
 } from '../shared/types'
-import { defaultPersistedConfig, legacyConfigView } from '../shared/config'
+import { defaultPersistedConfig, legacyConfigView, selectLaunchScene } from '../shared/config'
 import { operationErrorMessage } from '../shared/errors'
 import { translate } from './i18n'
 
@@ -512,17 +512,7 @@ function sceneSupported(scene: SceneKind): boolean {
 
 function selectScene(scene: SceneKind): void {
   if (!sceneSupported(scene)) return
-  config.launch.scene = scene
-  if (scene === 'record-only') {
-    config.launch.recordEnabled = true
-    config.launch.noPlayback = true
-  }
-  if (scene === 'control-only' && config.launch.mouseMode === 'sdk') config.launch.mouseMode = 'default'
-  if (scene === 'otg') {
-    if (config.launch.keyboardMode === 'sdk' || config.launch.keyboardMode === 'uhid') config.launch.keyboardMode = 'default'
-    if (config.launch.mouseMode === 'sdk' || config.launch.mouseMode === 'uhid') config.launch.mouseMode = 'default'
-    if (config.launch.gamepadMode === 'uhid') config.launch.gamepadMode = 'default'
-  }
+  selectLaunchScene(config.launch, scene)
   commandPreviews.value = []
 }
 

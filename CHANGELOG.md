@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Clear the background-recording flags forced by the Record-only scene when returning to Screen, Camera, or Virtual display playback.
+
 ## 2.4.3
 
 - Accept both LF and Windows CRLF line endings when verifying the packaged MIT license.
