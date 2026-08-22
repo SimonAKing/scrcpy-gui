@@ -5,6 +5,7 @@
 ### Fixed
 
 - Clear the background-recording flags forced by the Record-only scene when returning to Screen, Camera, or Virtual display playback.
+- Synchronize manual ADB device refreshes with the tracker snapshot so newly connected wireless devices are immediately available to device actions.
 
 ## 2.4.3
 

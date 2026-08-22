@@ -153,7 +153,7 @@ function executeBinary(file: string, args: string[], timeout = 20_000): Promise<
 export async function listDevices(runtime: RuntimeConfig): Promise<OperationResult<Device[]>> {
   try {
     const result = await adbCommand(runtime, ['devices', '-l'])
-    return { ok: true, data: parseAdbDevices(result.stdout) }
+    return { ok: true, data: deviceTracker.synchronize(parseAdbDevices(result.stdout)) }
   } catch (error) {
     return failureFromUnknown(error, 'ADB_LIST_FAILED', 'device-list', 'Unable to list Android devices.', {
       retryable: true,
