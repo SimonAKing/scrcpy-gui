@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultLaunchConfig } from '../src/shared/config'
+import { defaultLaunchConfig, selectLaunchScene } from '../src/shared/config'
 import { scenesConflict, serializeSceneOptions } from '../src/shared/scenes'
 import { buildScrcpyArgs } from '../src/main/scrcpy'
 
@@ -76,6 +76,40 @@ describe('scene option serialization', () => {
     camera.cameraId = '0'
     camera.videoEncoder = 'encoder\n--otg'
     expect(() => args(camera)).toThrow('Video encoder name is invalid')
+  })
+
+  it('does not leak record-only arguments into a selected playback scene', () => {
+    const config = defaultLaunchConfig()
+    config.scene = 'record-only'
+    config.recordEnabled = true
+    config.recordPath = '/tmp/capture.mp4'
+    config.noPlayback = true
+    config.recordVideo = false
+    config.recordAudio = false
+
+    selectLaunchScene(config, 'screen')
+
+    expect(config.recordEnabled).toBe(false)
+    expect(config.noPlayback).toBe(false)
+    expect(buildScrcpyArgs(config, 'SCREEN-1')).toEqual(['--serial=SCREEN-1'])
+
+    config.recordEnabled = true
+    selectLaunchScene(config, 'screen')
+    expect(buildScrcpyArgs(config, 'SCREEN-1')).toEqual([
+      '--serial=SCREEN-1', '--record=/tmp/capture.mp4'
+    ])
+  })
+
+  it('restores a valid video stream when selecting record-only', () => {
+    const config = defaultLaunchConfig()
+    config.recordVideo = false
+    config.recordAudio = false
+
+    selectLaunchScene(config, 'record-only')
+
+    expect(config).toMatchObject({
+      scene: 'record-only', recordEnabled: true, noPlayback: true, recordVideo: true, recordAudio: false
+    })
   })
 
   it('builds record-only, control-only and OTG modes without shell commands', () => {

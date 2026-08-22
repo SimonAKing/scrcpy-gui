@@ -1,4 +1,4 @@
-import type { AppConfigV3, LaunchConfig, Locale, PersistedConfig } from './types'
+import type { AppConfigV3, LaunchConfig, Locale, PersistedConfig, SceneKind } from './types'
 import { optionDefault } from './options'
 
 export function defaultLaunchConfig(): LaunchConfig {
@@ -24,6 +24,28 @@ export function defaultLaunchConfig(): LaunchConfig {
     },
     v4l2Sink: '', v4l2Buffer: 0, v4l2Playback: true, crop: optionDefault('crop'),
     window: { ...optionDefault<object>('windowPosition'), ...optionDefault<object>('windowSize') } as LaunchConfig['window'], extraArgs: ''
+  }
+}
+
+export function selectLaunchScene(config: LaunchConfig, scene: SceneKind): void {
+  const previousScene = config.scene
+  config.scene = scene
+  if (scene === 'record-only') {
+    config.recordEnabled = true
+    config.noPlayback = true
+    if (!config.recordVideo && !config.recordAudio) config.recordVideo = true
+  } else if (previousScene === 'record-only') {
+    // Do not leak the recording state forced by Record only into a playback scene.
+    // Recording can still be enabled explicitly for screen, camera, or virtual display.
+    config.recordEnabled = false
+    config.noPlayback = false
+  }
+
+  if (scene === 'control-only' && config.mouseMode === 'sdk') config.mouseMode = 'default'
+  if (scene === 'otg') {
+    if (config.keyboardMode === 'sdk' || config.keyboardMode === 'uhid') config.keyboardMode = 'default'
+    if (config.mouseMode === 'sdk' || config.mouseMode === 'uhid') config.mouseMode = 'default'
+    if (config.gamepadMode === 'uhid') config.gamepadMode = 'default'
   }
 }
 
