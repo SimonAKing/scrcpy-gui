@@ -54,6 +54,21 @@ describe('parseTrackDevicesSnapshot', () => {
 })
 
 describe('DeviceTracker', () => {
+  it('synchronizes a polled snapshot before the streaming tracker starts', () => {
+    const child = new FakeChild()
+    const tracker = new DeviceTracker({ spawnProcess: (() => child as unknown as ChildProcessWithoutNullStreams) })
+    trackers.push(tracker)
+    const events: DeviceTrackerEvent[] = []
+    tracker.subscribe((event) => events.push(event))
+
+    const devices = parseTrackDevicesSnapshot('WIFI:5555\tdevice model:Wireless_Phone transport_id:3\n')
+    expect(tracker.synchronize(devices)).toMatchObject([
+      { serial: 'WIFI:5555', state: 'device', connection: 'wireless' }
+    ])
+    expect(tracker.start('/fake/adb')).toMatchObject([{ serial: 'WIFI:5555' }])
+    expect(events[0]).toMatchObject({ status: 'tracking', source: 'track', revision: 1 })
+  })
+
   it('emits added, changed and removed deltas without duplicate serials', () => {
     const child = new FakeChild()
     const tracker = new DeviceTracker({ spawnProcess: (() => child as unknown as ChildProcessWithoutNullStreams) })

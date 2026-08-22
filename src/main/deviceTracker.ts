@@ -130,6 +130,11 @@ export class DeviceTracker {
     return this.devices.map((device) => ({ ...device }))
   }
 
+  synchronize(devices: Device[]): Device[] {
+    this.apply(devices, this.source, 'ADB device snapshot refreshed.')
+    return this.snapshot()
+  }
+
   private launchTrack(): void {
     if (this.stopped) return
     const generation = ++this.generation
