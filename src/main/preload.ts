@@ -52,6 +52,8 @@ const api: ScrcpyApi = {
     ipcRenderer.invoke('device:control', runtime, serial, action),
   screenshot: (runtime: RuntimeConfig, serial: string) =>
     ipcRenderer.invoke('device:screenshot', runtime, serial),
+  copyScreenshot: (runtime: RuntimeConfig, serial: string) =>
+    ipcRenderer.invoke('device:screenshot-copy', runtime, serial),
   previewAutomationImport: () => ipcRenderer.invoke('automation:import-preview'),
   commitAutomationImport: (token: string) => ipcRenderer.invoke('automation:import-commit', token),
   exportAutomation: (automation: AutomationMacro) => ipcRenderer.invoke('automation:export', automation),

@@ -17,6 +17,7 @@ describe('typed preload IPC contract', () => {
     expect(invoked).toContain('batch:preflight')
     expect(invoked).toContain('batch:start')
     expect(invoked).toContain('automation:import-preview')
+    expect(invoked).toContain('device:screenshot-copy')
   })
 
   it('backs every Renderer subscription and removes the exact listener on unsubscribe', () => {

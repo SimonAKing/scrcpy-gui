@@ -956,6 +956,16 @@ async function takeScreenshot(): Promise<void> {
   toast('success', `${t('screenshotSaved')} ${result.data}`)
 }
 
+async function copyScreenshot(): Promise<void> {
+  if (!controlSerial.value) return
+  const result = await window.scrcpy.copyScreenshot(runtimeSnapshot(), controlSerial.value)
+  if (!result.ok) {
+    toast('error', operationErrorMessage(result, t('operationFailed')))
+    return
+  }
+  toast('success', t('screenshotCopied'))
+}
+
 function startAutomationRecording(): void {
   recordedSteps.value = []
   automationName.value = ''
@@ -1624,7 +1634,8 @@ onBeforeUnmount(() => {
           <div v-if="workspaceSection === 'control'" class="workspace-pane">
             <div class="control-actions">
               <button v-for="action in controlActions" :key="action" class="ghost" :disabled="!controlDevice || recordingAutomation && !!replayingAutomation" @click="sendControlAction(action)">{{ actionLabel(action) }}</button>
-              <button class="secondary" :disabled="!controlDevice" @click="takeScreenshot">{{ t('screenshot') }}</button>
+              <button class="secondary" :disabled="!controlDevice" @click="takeScreenshot">{{ t('saveScreenshot') }}</button>
+              <button class="secondary" :disabled="!controlDevice" @click="copyScreenshot">{{ t('copyScreenshot') }}</button>
             </div>
             <div class="automation-bar">
               <div><strong>{{ t('automation') }}</strong><small>{{ t('automationHint') }}</small></div>

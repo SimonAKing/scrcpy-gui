@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { constants as fsConstants } from 'node:fs'
-import { access, stat, statfs, writeFile } from 'node:fs/promises'
-import { dirname, resolve as resolvePath } from 'node:path'
+import { access, mkdtemp, readFile, rm, stat, statfs, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve as resolvePath } from 'node:path'
 import type {
   Device,
   DeviceControlAction,
@@ -24,6 +26,8 @@ import { adbService } from './adbService'
 import { executeCommand, resolveBinary, type CommandOutput } from './runtime'
 
 const sessionManager = new ScrcpySessionManager()
+const MAX_SCREENSHOT_BYTES = 64 * 1024 * 1024
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 let trackerRuntime: RuntimeConfig = { scrcpyPath: '' }
 const deviceTracker = new DeviceTracker({
   pollDevices: async () => {
@@ -118,7 +122,7 @@ function executeBinary(file: string, args: string[], timeout = 20_000): Promise<
 
     child.stdout.on('data', (chunk: Buffer) => {
       size += chunk.length
-      if (size > 64 * 1024 * 1024) {
+      if (size > MAX_SCREENSHOT_BYTES) {
         child.kill()
         if (!settled) {
           settled = true
@@ -148,6 +152,73 @@ function executeBinary(file: string, args: string[], timeout = 20_000): Promise<
       resolve(Buffer.concat(stdout))
     })
   })
+}
+
+interface ScreenshotCommandExecutor {
+  binary(file: string, args: string[], timeout?: number): Promise<Buffer>
+  command(file: string, args: string[], timeout?: number, maxBuffer?: number): Promise<CommandOutput>
+}
+
+const screenshotCommandExecutor: ScreenshotCommandExecutor = {
+  binary: executeBinary,
+  command: executeCommand
+}
+
+function isPngScreenshot(data: Buffer): boolean {
+  return data.length >= PNG_SIGNATURE.length && data.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)
+}
+
+function screenshotFailureMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+async function captureScreenshotThroughFile(
+  adbPath: string,
+  serial: string,
+  executor: ScreenshotCommandExecutor
+): Promise<Buffer> {
+  const remotePath = `/data/local/tmp/scrcpy-gui-${randomUUID()}.png`
+  const localDirectory = await mkdtemp(join(tmpdir(), 'scrcpy-gui-screenshot-'))
+  const localPath = join(localDirectory, 'screenshot.png')
+  try {
+    await executor.command(adbPath, ['-s', serial, 'shell', 'screencap', '-p', remotePath], 20_000)
+    await executor.command(adbPath, ['-s', serial, 'pull', remotePath, localPath], 20_000)
+    const captured = await stat(localPath)
+    if (captured.size > MAX_SCREENSHOT_BYTES) {
+      throw new Error('Device screenshot exceeded the 64 MB safety limit.')
+    }
+    return readFile(localPath)
+  } finally {
+    await executor.command(adbPath, ['-s', serial, 'shell', 'rm', '-f', remotePath], 5_000).catch(() => undefined)
+    await rm(localDirectory, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
+export async function captureScreenshotPng(
+  adbPath: string,
+  serial: string,
+  executor: ScreenshotCommandExecutor = screenshotCommandExecutor
+): Promise<Buffer> {
+  const target = serial.trim()
+  let directFailure: unknown
+  try {
+    const direct = await executor.binary(adbPath, ['-s', target, 'exec-out', 'screencap', '-p'])
+    if (isPngScreenshot(direct)) return direct
+    directFailure = new Error(`ADB returned ${direct.length} bytes without a PNG signature.`)
+  } catch (error) {
+    directFailure = error
+  }
+
+  try {
+    const fallback = await captureScreenshotThroughFile(adbPath, target, executor)
+    if (isPngScreenshot(fallback)) return fallback
+    throw new Error(`ADB pulled ${fallback.length} bytes without a PNG signature.`)
+  } catch (fallbackFailure) {
+    throw new Error(
+      `The device did not return a valid PNG screenshot. Direct capture: ${screenshotFailureMessage(directFailure)} ` +
+      `File fallback: ${screenshotFailureMessage(fallbackFailure)}`
+    )
+  }
 }
 
 export async function listDevices(runtime: RuntimeConfig): Promise<OperationResult<Device[]>> {
@@ -325,21 +396,35 @@ export async function controlDevice(
   }
 }
 
-export async function captureDeviceScreenshot(
+export async function captureDeviceScreenshotBuffer(
   runtime: RuntimeConfig,
-  serial: string,
-  outputPath: string
-): Promise<OperationResult<string>> {
+  serial: string
+): Promise<OperationResult<Buffer>> {
   try {
     const adbPath = await resolveBinary(runtime, 'adb')
     if (!adbPath) return operationFailure('ADB_NOT_FOUND', 'screenshot', 'adb executable not found.', {
       suggestedActions: ['Recheck the runtime setup.']
     })
-    const png = await executeBinary(adbPath, ['-s', serial.trim(), 'exec-out', 'screencap', '-p'])
-    const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-    if (png.length < signature.length || !png.subarray(0, signature.length).equals(signature)) {
-      throw new Error('The device did not return a valid PNG screenshot.')
-    }
+    const png = await captureScreenshotPng(adbPath, serial.trim())
+    return { ok: true, data: png }
+  } catch (error) {
+    return failureFromUnknown(error, 'SCREENSHOT_FAILED', 'screenshot', 'Unable to capture the screenshot.', {
+      retryable: true,
+      suggestedActions: ['Confirm that the device is connected and unlocked.']
+    })
+  }
+}
+
+export async function captureDeviceScreenshot(
+  runtime: RuntimeConfig,
+  serial: string,
+  outputPath: string
+): Promise<OperationResult<string>> {
+  const capture = await captureDeviceScreenshotBuffer(runtime, serial)
+  if (!capture.ok) return { ok: false, error: capture.error }
+  if (!capture.data) return operationFailure('SCREENSHOT_FAILED', 'screenshot', 'Unable to capture the screenshot.')
+  try {
+    const png = capture.data
     await writeFile(outputPath, png)
     return { ok: true, data: outputPath }
   } catch (error) {

@@ -21,6 +21,7 @@ import type {
 } from '../shared/types'
 import {
   captureDeviceScreenshot,
+  captureDeviceScreenshotBuffer,
   connectDevice,
   controlDevice,
   disconnectDevice,
@@ -922,6 +923,22 @@ handle('device:screenshot', async (_event, runtime: RuntimeConfig, serial: strin
     }
   }
   return capture
+})
+handle('device:screenshot-copy', async (_event, runtime: RuntimeConfig, serial: string) => {
+  const capture = await captureDeviceScreenshotBuffer(runtimeConfig(runtime), deviceSerial(serial))
+  if (!capture.ok) return { ok: false, error: capture.error }
+  if (!capture.data) return operationFailure('SCREENSHOT_CLIPBOARD_FAILED', 'screenshot-clipboard', 'Unable to copy the screenshot.')
+  try {
+    const image = nativeImage.createFromBuffer(capture.data)
+    if (image.isEmpty()) throw new Error('Electron could not decode the captured PNG image.')
+    clipboard.writeImage(image)
+    return { ok: true, data: 'Screenshot copied to the system clipboard.' }
+  } catch (error) {
+    return failureFromUnknown(error, 'SCREENSHOT_CLIPBOARD_FAILED', 'screenshot-clipboard', 'Unable to copy the screenshot.', {
+      retryable: true,
+      suggestedActions: ['Try saving the screenshot to a file instead.']
+    })
+  }
 })
 handle('device:overview', async (_event, runtime: RuntimeConfig, serial: string) => {
   try {

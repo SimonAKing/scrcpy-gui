@@ -4,8 +4,13 @@
 
 ### Fixed
 
+- Fall back to an on-device temporary file when an ADB screenshot stream is unavailable or is not valid PNG data (#215).
 - Clear the background-recording flags forced by the Record-only scene when returning to Screen, Camera, or Virtual display playback.
 - Synchronize manual ADB device refreshes with the tracker snapshot so newly connected wireless devices are immediately available to device actions.
+
+### Added
+
+- Copy a device screenshot directly to the system clipboard while retaining the existing save-to-file action (#214).
 
 ## 2.4.3
 
