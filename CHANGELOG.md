@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.4.4
+
 ### Fixed
 
 - Fall back to an on-device temporary file when an ADB screenshot stream is unavailable or is not valid PNG data (#215).
@@ -11,6 +13,14 @@
 ### Added
 
 - Copy a device screenshot directly to the system clipboard while retaining the existing save-to-file action (#214).
+
+### Security
+
+- Update `fast-uri` to 3.1.7, `@xmldom/xmldom` to 0.8.15, and the transitive `js-yaml` build dependency to 4.3.2 with their upstream denial-of-service and URI-validation fixes (#212, #213).
+
+### Changed
+
+- Update Vitest and its mocker package to 4.1.11 (#216).
 
 ## 2.4.3
 

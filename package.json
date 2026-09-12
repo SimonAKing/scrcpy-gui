@@ -1,6 +1,6 @@
 {
   "name": "scrcpy-gui",
-  "version": "2.4.3",
+  "version": "2.4.4",
   "description": "A modern, secure desktop GUI for scrcpy",
   "author": "Simon Ma <simon@tomotoes.com>",
   "homepage": "https://github.com/SimonAKing/scrcpy-gui",
