@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 2.4.5
+
+### Fixed
+
+- Stop the ADB server on quit whenever Scrcpy GUI was the process that started it, so the bundled `adb` no longer keeps the install directory locked and blocks updating or moving the app on Windows (#219). An ADB server that was already running when the app launched is still left alone unless "Stop the shared ADB server when quitting" is enabled.
+- Route every quit path — the tray menu, the window close button, and Cmd+Q — through a single shutdown that cannot be interrupted by a second quit, so shutdown can no longer be torn down while ADB cleanup is still running (#219).
+- Hide the window as soon as quitting begins, so quitting from the tray responds immediately instead of appearing to do nothing while ADB shuts down (#219).
+- Bound shutdown with a five-second timeout so an unresponsive `adb` cannot prevent the app from quitting.
+
 ## 2.4.4
 
 ### Fixed
