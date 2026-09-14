@@ -13,6 +13,7 @@ type PollDevices = () => Promise<Device[]>
 interface DeviceTrackerOptions {
   spawnProcess?: TrackerSpawnProcess
   pollDevices?: PollDevices
+  onAdbOutput?: (output: string) => void
   restartBaseMs?: number
   restartMaxMs?: number
   pollVisibleMs?: number
@@ -60,6 +61,7 @@ export class DeviceTracker {
   private readonly listeners = new Set<TrackerListener>()
   private readonly spawnProcess: TrackerSpawnProcess
   private readonly pollDevices?: PollDevices
+  private readonly onAdbOutput?: (output: string) => void
   private readonly restartBaseMs: number
   private readonly restartMaxMs: number
   private readonly pollVisibleMs: number
@@ -82,6 +84,7 @@ export class DeviceTracker {
   constructor(options: DeviceTrackerOptions = {}) {
     this.spawnProcess = options.spawnProcess ?? spawn
     this.pollDevices = options.pollDevices
+    this.onAdbOutput = options.onAdbOutput
     this.restartBaseMs = options.restartBaseMs ?? 250
     this.restartMaxMs = options.restartMaxMs ?? 10_000
     this.pollVisibleMs = options.pollVisibleMs ?? 2_000
@@ -165,7 +168,11 @@ export class DeviceTracker {
         child.kill('SIGTERM')
       }
     })
-    child.stderr.on('data', (chunk: Buffer) => { stderr = `${stderr}\n${String(chunk)}`.trim().slice(-4_000) })
+    child.stderr.on('data', (chunk: Buffer) => {
+      const output = String(chunk)
+      this.onAdbOutput?.(output)
+      stderr = `${stderr}\n${output}`.trim().slice(-4_000)
+    })
     const failed = (message: string): void => {
       if (settled || generation !== this.generation || this.stopped) return
       settled = true

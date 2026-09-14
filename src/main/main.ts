@@ -20,6 +20,7 @@ import type {
   ScrcpyStatusEvent
 } from '../shared/types'
 import {
+  adbServerStartedByApp,
   captureDeviceScreenshot,
   captureDeviceScreenshotBuffer,
   connectDevice,
@@ -78,13 +79,15 @@ let isQuitting = false
 let registeredBossKey = ''
 let killAdbOnQuit = false
 let quitRuntime: RuntimeConfig = { scrcpyPath: '' }
-let shutdownStarted = false
+let shutdownPromise: Promise<void> | null = null
+let shutdownFinished = false
 let configRepository: ConfigRepository | undefined
 let artifactService: ArtifactService | undefined
 let diagnosticDraft: { runtimeKey: string; createdAt: number; prepared: PreparedDiagnostics } | undefined
 let lastDiagnosticScrcpyVersion = ''
 const eventStore = new EventStore()
 const rendererEntryUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
+const SHUTDOWN_TIMEOUT_MS = 5_000
 
 function rendererUrlIsTrusted(url: string): boolean {
   return isTrustedRendererUrl(url, rendererEntryUrl, process.env.ELECTRON_RENDERER_URL)
@@ -260,13 +263,7 @@ function createTray(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Show Scrcpy GUI', click: () => mainWindow?.show() },
-      {
-        label: 'Quit',
-        click: () => {
-          isQuitting = true
-          app.quit()
-        }
-      }
+      { label: 'Quit', click: () => app.quit() }
     ])
   )
   tray.on('click', () => mainWindow?.show())
@@ -1067,17 +1064,44 @@ app.whenReady().then(() => {
   })
 })
 
-app.on('before-quit', (event) => {
+function withShutdownTimeout(task: Promise<void>): Promise<void> {
+  return new Promise((settle) => {
+    const timer = setTimeout(settle, SHUTDOWN_TIMEOUT_MS)
+    void task.finally(() => {
+      clearTimeout(timer)
+      settle()
+    })
+  })
+}
+
+function beginShutdown(): Promise<void> {
+  if (shutdownPromise) return shutdownPromise
   isQuitting = true
   globalShortcut.unregisterAll()
   batchAutomationService.stopAll()
   stopAllScrcpy()
   stopDeviceTracker()
-  if (killAdbOnQuit && !shutdownStarted) {
-    event.preventDefault()
-    shutdownStarted = true
-    void stopAdbServer(quitRuntime).finally(() => app.quit())
-  }
+  // Hide the window the moment quitting starts. Shutdown waits for ADB, and leaving the
+  // window on screen made quitting from the tray look like nothing had happened, so people
+  // clicked Quit again and the second quit tore the app down mid-cleanup.
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide()
+  // The ADB server is detached and runs our own adb binary, so it survives the app and keeps
+  // the install directory locked on Windows. Stop it whenever this app started it, even if the
+  // user opted out of stopping a server that was already running when the app launched.
+  const shouldStopAdb = killAdbOnQuit || adbServerStartedByApp()
+  shutdownPromise = shouldStopAdb ? withShutdownTimeout(stopAdbServer(quitRuntime)) : Promise.resolve()
+  return shutdownPromise
+}
+
+app.on('before-quit', (event) => {
+  // Every quit route lands here: the tray menu, the window close button, Cmd+Q and
+  // window-all-closed. Hold the quit until cleanup finishes so no route can skip it.
+  if (shutdownFinished) return
+  event.preventDefault()
+  void beginShutdown().then(() => {
+    shutdownFinished = true
+    app.quit()
+  })
 })
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

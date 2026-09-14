@@ -22,7 +22,7 @@ import { ScrcpySessionManager } from './sessionManager'
 import { buildCapabilitySnapshot } from './capabilities'
 import { DeviceTracker } from './deviceTracker'
 import { failureFromUnknown, operationFailure, operationErrorMessage } from '../shared/errors'
-import { adbService } from './adbService'
+import { adbService, adbServerStartedByApp, forgetAdbServerOwnership, noteAdbOutput } from './adbService'
 import { executeCommand, resolveBinary, type CommandOutput } from './runtime'
 
 const sessionManager = new ScrcpySessionManager()
@@ -30,6 +30,7 @@ const MAX_SCREENSHOT_BYTES = 64 * 1024 * 1024
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 let trackerRuntime: RuntimeConfig = { scrcpyPath: '' }
 const deviceTracker = new DeviceTracker({
+  onAdbOutput: noteAdbOutput,
   pollDevices: async () => {
     const result = await listDevices(trackerRuntime)
     if (!result.ok) throw new Error(operationErrorMessage(result, 'Unable to poll ADB devices.'))
@@ -133,7 +134,10 @@ function executeBinary(file: string, args: string[], timeout = 20_000): Promise<
       }
       stdout.push(chunk)
     })
-    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
+    child.stderr.on('data', (chunk: Buffer) => {
+      noteAdbOutput(String(chunk))
+      stderr.push(chunk)
+    })
     child.on('error', (error) => {
       clearTimeout(timer)
       if (!settled) {
@@ -265,11 +269,15 @@ export function listTrackedDevices(): Device[] {
   return deviceTracker.snapshot()
 }
 
+export { adbServerStartedByApp }
+
 export async function stopAdbServer(runtime: RuntimeConfig): Promise<void> {
   try {
     await adbCommand(runtime, ['kill-server'])
   } catch {
     // Quitting must not be blocked if adb is already unavailable.
+  } finally {
+    forgetAdbServerOwnership()
   }
 }
 

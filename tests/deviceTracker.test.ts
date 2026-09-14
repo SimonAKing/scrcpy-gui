@@ -135,6 +135,23 @@ describe('DeviceTracker', () => {
     expect(events.findLast((event) => event.status === 'tracking')).toMatchObject({ source: 'poll', added: [{ serial: 'POLL' }] })
   })
 
+  it('reports adb stderr so a server this app started can be stopped on quit', () => {
+    const child = new FakeChild()
+    const outputs: string[] = []
+    const tracker = new DeviceTracker({
+      spawnProcess: (() => child as unknown as ChildProcessWithoutNullStreams),
+      onAdbOutput: (output) => outputs.push(output)
+    })
+    trackers.push(tracker)
+    tracker.start('/fake/adb')
+
+    child.stderr.write('* daemon not running; starting now at tcp:5037\n')
+    child.stderr.write('* daemon started successfully\n')
+
+    expect(outputs.join('')).toContain('daemon not running')
+    expect(outputs.join('')).toContain('daemon started successfully')
+  })
+
   it('tracks a controlled fake ADB child process through the real stream boundary', async () => {
     const source = `
       const payload = Buffer.from('REAL\\tdevice model:Fake_Phone transport_id:7\\n');
