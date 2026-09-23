@@ -690,6 +690,8 @@ export interface ScrcpyApi {
   control(runtime: RuntimeConfig, serial: string, action: DeviceControlAction): Promise<OperationResult<string>>
   screenshot(runtime: RuntimeConfig, serial: string): Promise<OperationResult<string>>
   copyScreenshot(runtime: RuntimeConfig, serial: string): Promise<OperationResult<string>>
+  onScreenshotShortcut(callback: (action: 'save' | 'copy') => void): () => void
+  onControlShortcut(callback: (action: DeviceControlAction) => void): () => void
   previewAutomationImport(): Promise<OperationResult<AutomationImportPreview>>
   commitAutomationImport(token: string): Promise<OperationResult<AutomationMacro>>
   exportAutomation(automation: AutomationMacro): Promise<OperationResult<string>>

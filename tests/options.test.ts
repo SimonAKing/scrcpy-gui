@@ -88,6 +88,13 @@ describe('expert argument policy', () => {
 })
 
 describe('command provenance', () => {
+  it('keeps an explicitly selected modifier instead of adding the macOS Command default', () => {
+    const config = defaultLaunchConfig()
+    config.shortcutModifier = 'lalt'
+    expect(buildScrcpyArgDetails(config, 'ABC').args.filter((arg) => arg.startsWith('--shortcut-mod=')))
+      .toEqual(['--shortcut-mod=lalt'])
+  })
+
   it('labels session, profile, device override and expert sources per argv token', () => {
     const config = defaultLaunchConfig()
     config.windowTitle = 'Lab phone'
@@ -98,6 +105,7 @@ describe('command provenance', () => {
       { arg: '--serial=ABC', source: 'session' },
       { arg: '--window-title=Lab phone', source: 'device-override' },
       { arg: '--max-fps=60', source: 'profile', sourceLabel: 'Gaming' },
+      ...(process.platform === 'darwin' ? [{ arg: '--shortcut-mod=lsuper', source: 'profile', sourceLabel: 'Gaming' }] : []),
       { arg: '--power-off-on-close', source: 'expert' }
     ])
     expect(preview.warnings).toHaveLength(1)

@@ -81,6 +81,14 @@
     "mac": {
       "icon": "build/icons/icon.icns",
       "category": "public.app-category.utilities",
+      "fileAssociations": [
+        {
+          "ext": "apk",
+          "name": "Android APK",
+          "role": "Editor",
+          "rank": "Default"
+        }
+      ],
       "target": [
         "dmg",
         "zip"

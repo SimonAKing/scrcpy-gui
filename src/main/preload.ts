@@ -54,6 +54,16 @@ const api: ScrcpyApi = {
     ipcRenderer.invoke('device:screenshot', runtime, serial),
   copyScreenshot: (runtime: RuntimeConfig, serial: string) =>
     ipcRenderer.invoke('device:screenshot-copy', runtime, serial),
+  onScreenshotShortcut: (callback: (action: 'save' | 'copy') => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, action: 'save' | 'copy'): void => callback(action)
+    ipcRenderer.on('app:screenshot-shortcut', listener)
+    return () => ipcRenderer.removeListener('app:screenshot-shortcut', listener)
+  },
+  onControlShortcut: (callback: (action: DeviceControlAction) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, action: DeviceControlAction): void => callback(action)
+    ipcRenderer.on('app:control-shortcut', listener)
+    return () => ipcRenderer.removeListener('app:control-shortcut', listener)
+  },
   previewAutomationImport: () => ipcRenderer.invoke('automation:import-preview'),
   commitAutomationImport: (token: string) => ipcRenderer.invoke('automation:import-commit', token),
   exportAutomation: (automation: AutomationMacro) => ipcRenderer.invoke('automation:export', automation),

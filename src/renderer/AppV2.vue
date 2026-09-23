@@ -183,6 +183,8 @@ let removeDeviceListener: (() => void) | undefined
 let removeAppEventListener: (() => void) | undefined
 let removeBatchProgressListener: (() => void) | undefined
 let removeBatchRunListener: (() => void) | undefined
+let removeScreenshotShortcutListener: (() => void) | undefined
+let removeControlShortcutListener: (() => void) | undefined
 let lastRecordedActionAt = 0
 let configRevision = 0
 let configReady = false
@@ -193,6 +195,7 @@ const trackerStatus = ref<DeviceTrackerEvent['status']>('stopped')
 const trackerSource = ref<DeviceTrackerEvent['source']>('track')
 
 const t = (key: string): string => translate(config.locale, key)
+const isMac = navigator.platform.toLowerCase().includes('mac')
 const runtimeVersion = (binary: 'scrcpy' | 'adb'): string => {
   const value = environment.value?.[binary].version || ''
   const match = binary === 'scrcpy'
@@ -930,6 +933,33 @@ function actionLabel(action: DeviceControlAction): string {
   return t(keys[action])
 }
 
+const shortcutModifierLabel = computed(() => {
+  const profileId = config.deviceProfiles[controlSerial.value]
+  const profile = config.profiles.find((item) => item.id === profileId)
+  const runningSession = [...sessions.value].reverse().find((session) =>
+    session.serialAtLaunch === controlSerial.value && sessionIsActive(session))
+  const modifier = runningSession?.args.find((arg) => arg.startsWith('--shortcut-mod='))?.split('=')[1] ||
+    (profile?.launch || config.launch).shortcutModifier
+  if (modifier === 'default') return isMac ? '⌘' : 'MOD'
+  if (modifier.endsWith('super')) return isMac ? '⌘' : 'Super'
+  if (modifier.endsWith('alt')) return isMac ? '⌥' : 'Alt'
+  return 'Ctrl'
+})
+
+function actionShortcut(action: DeviceControlAction): string {
+  if (isMac) {
+    if (action === 'auto-rotate') return '⌘⌥R'
+    if (action === 'show-touches-on') return '⌘⌥T'
+    if (action === 'show-touches-off') return '⌘⌥⇧T'
+  }
+  const key: Partial<Record<DeviceControlAction, string>> = {
+    back: 'B', home: 'H', 'app-switch': 'S', menu: 'M',
+    'volume-down': '↓', 'volume-up': '↑', power: 'P',
+    'screen-off': 'O', 'screen-on': '⇧O', rotate: 'R'
+  }
+  return key[action] ? `${shortcutModifierLabel.value}${key[action]}` : '—'
+}
+
 async function sendControlAction(action: DeviceControlAction): Promise<void> {
   if (!controlSerial.value) return
   const actionAt = Date.now()
@@ -1394,6 +1424,11 @@ onMounted(async () => {
   removeAppEventListener = window.scrcpy.onEvent(handleAppEvent)
   removeBatchProgressListener = window.scrcpy.onBatchProgress(handleBatchProgress)
   removeBatchRunListener = window.scrcpy.onBatchRun(handleBatchRun)
+  removeScreenshotShortcutListener = window.scrcpy.onScreenshotShortcut((action) => {
+    if (action === 'save') void takeScreenshot()
+    else void copyScreenshot()
+  })
+  removeControlShortcutListener = window.scrcpy.onControlShortcut((action) => void sendControlAction(action))
   const historicalEvents = await window.scrcpy.listEvents({ limit: 1_000 })
   const liveEventIds = new Set(logs.value.map((event) => event.id))
   logs.value.unshift(...historicalEvents.filter((event) => !liveEventIds.has(event.id)))
@@ -1424,6 +1459,8 @@ onBeforeUnmount(() => {
   removeAppEventListener?.()
   removeBatchProgressListener?.()
   removeBatchRunListener?.()
+  removeScreenshotShortcutListener?.()
+  removeControlShortcutListener?.()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
@@ -1633,9 +1670,9 @@ onBeforeUnmount(() => {
 
           <div v-if="workspaceSection === 'control'" class="workspace-pane">
             <div class="control-actions">
-              <button v-for="action in controlActions" :key="action" class="ghost" :disabled="!controlDevice || recordingAutomation && !!replayingAutomation" @click="sendControlAction(action)">{{ actionLabel(action) }}</button>
-              <button class="secondary" :disabled="!controlDevice" @click="takeScreenshot">{{ t('saveScreenshot') }}</button>
-              <button class="secondary" :disabled="!controlDevice" @click="copyScreenshot">{{ t('copyScreenshot') }}</button>
+              <button v-for="action in controlActions" :key="action" class="ghost" :disabled="!controlDevice || recordingAutomation && !!replayingAutomation" @click="sendControlAction(action)"><span>{{ actionLabel(action) }}</span><kbd>{{ actionShortcut(action) }}</kbd></button>
+              <button class="secondary" :disabled="!controlDevice" @click="takeScreenshot"><span>{{ t('saveScreenshot') }}</span><kbd v-if="isMac">⌘⇧S</kbd></button>
+              <button class="secondary" :disabled="!controlDevice" @click="copyScreenshot"><span>{{ t('copyScreenshot') }}</span><kbd v-if="isMac">⌘⇧C</kbd></button>
             </div>
             <div class="automation-bar">
               <div><strong>{{ t('automation') }}</strong><small>{{ t('automationHint') }}</small></div>

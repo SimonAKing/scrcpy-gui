@@ -74,6 +74,8 @@ Download the package for your platform from [GitHub Releases](https://github.com
 
 The current stable artifacts are not code-signed or notarized. Your operating system may ask you to confirm that you trust the downloaded application. Verify the download against the release `SHA256SUMS.txt` before opening it.
 
+The locally built macOS app declares `.apk` as an openable file type. Double-clicking an APK in Finder installs it on the only authorized device, or asks you to choose when several devices are online. If another app is already the default for APKs, select Scrcpy GUI in Finder's **Get Info → Open with** and click **Change All**.
+
 Releases from v2.4.1 also include an SPDX SBOM and GitHub build-provenance attestations. After downloading an asset, verify its workflow identity with `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` in addition to checking the SHA-256 manifest.
 
 The exact automated checks, SBOM/provenance evidence, and unverified hardware matrix are recorded in the [v2.4.1 release smoke report](docs/RELEASE_SMOKE_V2.4.1.md). The earlier three-platform install/upgrade/uninstall evidence remains in the [v2.4.0 report](docs/RELEASE_SMOKE_V2.4.0.md).
@@ -144,7 +146,11 @@ The optional global Boss key immediately closes every active mirror and hides Sc
 
 ## Scrcpy shortcuts
 
-The shortcut modifier is controlled by scrcpy and may vary by platform. Keep **System default** unless you deliberately want another modifier. Common shortcuts include:
+On macOS, **System default** makes scrcpy use only Command (⌘) for `MOD`. Other platforms keep scrcpy's default. Control buttons display their shortcuts. Standard scrcpy shortcuts work when the mirror window has focus.
+
+Save a screenshot with `Cmd+Shift+S` or copy one with `Cmd+Shift+C`. Auto rotation, show touches, and hide touches use `Cmd+Option+R`, `Cmd+Option+T`, and `Cmd+Option+Shift+T`. Scrcpy GUI registers these five as global shortcuts, so they also occupy the same combinations in other apps while it is running.
+
+Common shortcuts include:
 
 | Action | Shortcut |
 | --- | --- |
@@ -159,7 +165,7 @@ The shortcut modifier is controlled by scrcpy and may vary by platform. Keep **S
 | Copy / Cut / Paste | `MOD` + `c` / `x` / `v` |
 | Toggle FPS counter | `MOD` + `i` |
 
-See the current [scrcpy control documentation](https://github.com/Genymobile/scrcpy/blob/master/doc/control.md) for the complete list. File drag-and-drop, APK installation, clipboard behavior, and these shortcuts are implemented by the launched scrcpy window.
+See the current [scrcpy control documentation](https://github.com/Genymobile/scrcpy/blob/master/doc/control.md) for the complete list. The mirror window implements file drag-and-drop and clipboard shortcuts; Scrcpy GUI handles APKs opened from Finder.
 
 ## Troubleshooting
 

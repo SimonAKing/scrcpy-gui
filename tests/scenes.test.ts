@@ -91,12 +91,14 @@ describe('scene option serialization', () => {
 
     expect(config.recordEnabled).toBe(false)
     expect(config.noPlayback).toBe(false)
-    expect(buildScrcpyArgs(config, 'SCREEN-1')).toEqual(['--serial=SCREEN-1'])
+    expect(buildScrcpyArgs(config, 'SCREEN-1')).toEqual([
+      '--serial=SCREEN-1', ...(process.platform === 'darwin' ? ['--shortcut-mod=lsuper'] : [])
+    ])
 
     config.recordEnabled = true
     selectLaunchScene(config, 'screen')
     expect(buildScrcpyArgs(config, 'SCREEN-1')).toEqual([
-      '--serial=SCREEN-1', '--record=/tmp/capture.mp4'
+      '--serial=SCREEN-1', '--record=/tmp/capture.mp4', ...(process.platform === 'darwin' ? ['--shortcut-mod=lsuper'] : [])
     ])
   })
 
@@ -126,15 +128,22 @@ describe('scene option serialization', () => {
     const control = defaultLaunchConfig()
     control.scene = 'control-only'
     control.keyboardMode = 'uhid'
-    expect(buildScrcpyArgs(control, 'CTRL-1')).toEqual(['--serial=CTRL-1', '--no-video', '--no-audio', '--keyboard=uhid'])
+    expect(buildScrcpyArgs(control, 'CTRL-1')).toEqual([
+      '--serial=CTRL-1', '--no-video', '--no-audio', '--keyboard=uhid',
+      ...(process.platform === 'darwin' ? ['--shortcut-mod=lsuper'] : [])
+    ])
     control.mouseMode = 'sdk'
     expect(() => buildScrcpyArgs(control, 'CTRL-1')).toThrow('cannot use SDK mouse')
 
     const otg = defaultLaunchConfig()
     otg.scene = 'otg'
     otg.gamepadMode = 'aoa'
-    expect(buildScrcpyArgs(otg, 'USB-1')).toEqual(['--serial=USB-1', '--otg', '--gamepad=aoa'])
-    expect(buildScrcpyArgs(otg, '')).toEqual(['--otg', '--gamepad=aoa'])
+    expect(buildScrcpyArgs(otg, 'USB-1')).toEqual([
+      '--serial=USB-1', '--otg', '--gamepad=aoa', ...(process.platform === 'darwin' ? ['--shortcut-mod=lsuper'] : [])
+    ])
+    expect(buildScrcpyArgs(otg, '')).toEqual([
+      '--otg', '--gamepad=aoa', ...(process.platform === 'darwin' ? ['--shortcut-mod=lsuper'] : [])
+    ])
     otg.keyboardMode = 'uhid'
     expect(() => buildScrcpyArgs(otg, 'USB-1')).toThrow('OTG input modes')
   })

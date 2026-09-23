@@ -112,6 +112,14 @@ export function buildScrcpyArgDetails(
       })
     }
   }
+  // On macOS, use Command alone for scrcpy shortcuts. The upstream default also
+  // accepts Option, which makes the shortcut hint in the GUI ambiguous.
+  if (platform === 'darwin' && ['screen', 'virtual-display', 'control-only', 'otg'].includes(config.scene) &&
+      config.shortcutModifier === 'default' &&
+      !details.some((detail) => detail.optionKey === 'shortcutModifier')) {
+    details.push({ arg: '--shortcut-mod=lsuper', optionKey: 'shortcutModifier', helpKey: 'shortcutModifier',
+      source, sourceLabel: source === 'profile' ? sourceLabel : undefined })
+  }
   const expert = analyzeExpertArgs(config.extraArgs)
   details.push(...expert.args.map((arg) => ({ arg, optionKey: 'expertArgs', helpKey: 'extraArgs', source: 'expert' as const })))
   return { args: details.map((detail) => detail.arg), details, warnings: expert.warnings }
