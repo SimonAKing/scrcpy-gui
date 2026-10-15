@@ -33,7 +33,7 @@
     "dist:linux": "npm run build && node scripts/fetch-scrcpy.mjs linux && electron-builder --linux --x64 --publish never"
   },
   "dependencies": {
-    "vue": "^3.5.41"
+    "vue": "^3.5.44"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
