@@ -31,39 +31,54 @@ function run(executable, args, expected) {
   console.log(output.split(/\r?\n/)[0])
 }
 
-const archive = (await readdir(releaseDirectory))
-  .find((name) => name.startsWith(`Scrcpy.GUI-${packageVersion}-`) && name.endsWith(archiveSuffix))
-if (!archive) throw new Error(`No v${packageVersion} current-architecture packaged archive matches *${archiveSuffix}.`)
+const archives = (await readdir(releaseDirectory))
+  .filter((name) => name.startsWith(`Scrcpy.GUI-${packageVersion}-`) && (
+    process.platform === 'darwin' ? /-mac-(arm64|x64)\.zip$/.test(name) : name.endsWith(archiveSuffix)
+  ))
+if (!archives.some((name) => name.endsWith(archiveSuffix))) {
+  throw new Error(`No v${packageVersion} current-architecture packaged archive matches *${archiveSuffix}.`)
+}
+if (process.platform === 'darwin' && archives.length !== 2) {
+  throw new Error('Both arm64 and x64 macOS ZIPs must be present for signature verification.')
+}
 
-const temporary = await mkdtemp(join(tmpdir(), 'scrcpy-gui-package-smoke-'))
-try {
-  const extraction = spawnSync('tar', ['-xf', join(releaseDirectory, archive), '-C', temporary], { stdio: 'inherit', windowsHide: true })
-  if (extraction.error || extraction.status !== 0) throw extraction.error || new Error(`Could not extract ${archive}.`)
-  const files = await walk(temporary)
-  const executableName = process.platform === 'win32' ? 'scrcpy.exe' : 'scrcpy'
-  const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb'
-  const runtimeFile = (name) => files.find((path) => basename(path) === name && dirname(path).split(sep).includes('scrcpy'))
-  const scrcpy = runtimeFile(executableName)
-  const adb = runtimeFile(adbName)
-  const runtimeLicense = runtimeFile(process.platform === 'win32' ? 'LICENSE.txt' : 'LICENSE')
-  const guiLicense = files.find((path) => basename(path) === 'LICENSE.scrcpy-gui.txt')
-  const thirdPartyNotices = files.find((path) => basename(path) === 'THIRD_PARTY_NOTICES.md')
-  if (!scrcpy || !adb || !runtimeLicense || !guiLicense || !thirdPartyNotices) {
-    throw new Error('The packaged archive does not contain scrcpy, adb, the upstream runtime license, the Scrcpy GUI license, and third-party notices.')
+for (const archive of archives) {
+  const temporary = await mkdtemp(join(tmpdir(), 'scrcpy-gui-package-smoke-'))
+  try {
+    const extraction = spawnSync('tar', ['-xf', join(releaseDirectory, archive), '-C', temporary], { stdio: 'inherit', windowsHide: true })
+    if (extraction.error || extraction.status !== 0) throw extraction.error || new Error(`Could not extract ${archive}.`)
+    if (process.platform === 'darwin') {
+      run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', join(temporary, 'Scrcpy GUI.app')], /valid on disk/)
+    }
+    const files = await walk(temporary)
+    const executableName = process.platform === 'win32' ? 'scrcpy.exe' : 'scrcpy'
+    const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb'
+    const runtimeFile = (name) => files.find((path) => basename(path) === name && dirname(path).split(sep).includes('scrcpy'))
+    const scrcpy = runtimeFile(executableName)
+    const adb = runtimeFile(adbName)
+    const runtimeLicense = runtimeFile(process.platform === 'win32' ? 'LICENSE.txt' : 'LICENSE')
+    const guiLicense = files.find((path) => basename(path) === 'LICENSE.scrcpy-gui.txt')
+    const thirdPartyNotices = files.find((path) => basename(path) === 'THIRD_PARTY_NOTICES.md')
+    if (!scrcpy || !adb || !runtimeLicense || !guiLicense || !thirdPartyNotices) {
+      throw new Error('The packaged archive does not contain scrcpy, adb, the upstream runtime license, the Scrcpy GUI license, and third-party notices.')
+    }
+    const [runtimeLicenseText, guiLicenseText] = await Promise.all([
+      readFile(runtimeLicense, 'utf8'),
+      readFile(guiLicense, 'utf8')
+    ])
+    if (!/Apache License\s+Version 2\.0/s.test(runtimeLicenseText)) {
+      throw new Error('The packaged archive does not preserve the expected scrcpy Apache-2.0 license text.')
+    }
+    if (!/^MIT License\r?\n/.test(guiLicenseText)) {
+      throw new Error('The packaged archive does not preserve the expected Scrcpy GUI MIT license text.')
+    }
+    // Validate both macOS signatures without requiring Rosetta to execute the other architecture.
+    if (archive.endsWith(archiveSuffix)) {
+      run(scrcpy, ['--version'], /^scrcpy\s+4\.1\b/im)
+      run(adb, ['version'], /^Android Debug Bridge version\s+1\.0\.41\b/im)
+    }
+    console.log(`Verified packaged runtime from ${archive}.`)
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
   }
-  const [runtimeLicenseText, guiLicenseText] = await Promise.all([
-    readFile(runtimeLicense, 'utf8'),
-    readFile(guiLicense, 'utf8')
-  ])
-  if (!/Apache License\s+Version 2\.0/s.test(runtimeLicenseText)) {
-    throw new Error('The packaged archive does not preserve the expected scrcpy Apache-2.0 license text.')
-  }
-  if (!/^MIT License\r?\n/.test(guiLicenseText)) {
-    throw new Error('The packaged archive does not preserve the expected Scrcpy GUI MIT license text.')
-  }
-  run(scrcpy, ['--version'], /^scrcpy\s+4\.1\b/im)
-  run(adb, ['version'], /^Android Debug Bridge version\s+1\.0\.41\b/im)
-  console.log(`Verified packaged runtime from ${archive}.`)
-} finally {
-  await rm(temporary, { recursive: true, force: true })
 }

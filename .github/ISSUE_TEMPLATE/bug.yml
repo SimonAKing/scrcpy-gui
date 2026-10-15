@@ -11,21 +11,24 @@ body:
           required: true
         - label: I searched existing issues for the same error.
           required: true
-        - label: The same device works when I run current scrcpy directly.
+        - label: For device-related problems, I tested current scrcpy directly or explained why I could not.
           required: true
   - type: input
+    id: version
     attributes:
       label: Scrcpy GUI version
-      placeholder: 2.4.0
+      placeholder: 2.4.5
     validations:
       required: true
   - type: input
+    id: scrcpy-version
     attributes:
       label: scrcpy version
       placeholder: 4.1
     validations:
       required: true
   - type: input
+    id: os
     attributes:
       label: Operating system
       placeholder: Windows 11 x64 / macOS 15 arm64 / Ubuntu 24.04
@@ -34,17 +37,32 @@ body:
   - type: input
     attributes:
       label: Android device and version
+      description: For installation or startup failures, enter N/A.
     validations:
       required: true
   - type: textarea
+    id: reproduction
     attributes:
       label: Reproduction steps
     validations:
       required: true
   - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Describe what you expected and what happened, including the exact error message or a screenshot.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
     attributes:
       label: Logs
-      description: Copy relevant output from the Logs tab. Remove secrets and private network details.
+      description: Copy relevant output from the Logs tab. If the app cannot start, include the operating system's error instead. Remove secrets and private network details.
       render: text
     validations:
       required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostic bundle
+      description: Optionally attach the ZIP exported from the app's Logs tab after reviewing its contents. Naming a ZIP here does not upload it.

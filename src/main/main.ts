@@ -71,6 +71,7 @@ import { AutomationRunner } from './automationRunner'
 import { BatchAutomationService, type PreparedBatchResource } from './batchAutomationService'
 import { automationTransferService } from './automationTransferService'
 import { readBoundedRegularUtf8File } from './safeFile'
+import { buildIssueHelperUrl } from './issueHelper'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -477,36 +478,21 @@ handle('diagnostics:export', async (_event, runtime: RuntimeConfig) => {
 })
 handle('diagnostics:issue-helper', async (_event, artifactId?: string) => {
   try {
-    let bundleName = 'Attach the exported diagnostic bundle manually after reviewing it.'
+    let bundleName: string | undefined
     if (artifactId !== undefined) {
       if (!artifactService) throw new Error('Artifact service is not ready.')
       const artifact = await artifactService.getExisting(boundedString(artifactId, 'diagnostic artifact id', 128))
       if (artifact.kind !== 'diagnostic') throw new TypeError('Selected artifact is not a diagnostic bundle.')
-      bundleName = `Attach \`${artifact.name}\` manually after reviewing its contents.`
+      bundleName = artifact.name
     }
-    const body = [
-      '### Environment',
-      `- Scrcpy GUI: ${app.getVersion()}`,
-      `- scrcpy: ${lastDiagnosticScrcpyVersion || 'See diagnostic bundle'}`,
-      `- OS/arch: ${platform()} ${release()} / ${arch()}`,
-      '',
-      '### Steps to reproduce',
-      '1. ',
-      '2. ',
-      '',
-      '### Expected behavior',
-      '',
-      '### Actual behavior',
-      '',
-      '### Diagnostic bundle',
-      bundleName,
-      '',
-      '> Scrcpy GUI did not upload any file or submit this issue.'
-    ].join('\n')
-    const url = new URL('https://github.com/SimonAKing/scrcpy-gui/issues/new')
-    url.searchParams.set('title', '[Bug] ')
-    url.searchParams.set('body', body)
-    await shell.openExternal(url.toString())
+    await shell.openExternal(buildIssueHelperUrl({
+      appVersion: app.getVersion(),
+      scrcpyVersion: lastDiagnosticScrcpyVersion,
+      platform: platform(),
+      release: release(),
+      arch: arch(),
+      bundleName
+    }))
     return { ok: true }
   } catch (error) {
     return failureFromUnknown(error, 'ISSUE_HELPER_FAILED', 'issue-helper', 'Unable to open the GitHub issue helper.')

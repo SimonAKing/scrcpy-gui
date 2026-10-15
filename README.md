@@ -32,7 +32,7 @@ Settings are split into focused General, Video, Controls, Recording, Window, and
 
 ## What is scrcpy?
 
-Scrcpy is a fast, lightweight application maintained by Genymobile. It mirrors and controls Android devices connected through USB or TCP/IP without root access and without leaving an application installed on the device. Scrcpy GUI remains a separate frontend; release packages include an unmodified, checksum-verified official scrcpy bundle for easier installation, under scrcpy's own license.
+Scrcpy is a fast, lightweight application maintained by Genymobile. It mirrors and controls Android devices connected through USB or TCP/IP without root access and without leaving an application installed on the device. Scrcpy GUI remains a separate frontend; release packages include a checksum-verified official scrcpy bundle for easier installation, under scrcpy's own license. macOS packaging refreshes the bundled executable signatures without changing their functionality.
 
 ## Highlights
 
@@ -72,11 +72,17 @@ Download the package for your platform from [GitHub Releases](https://github.com
 - **macOS:** Intel or Apple Silicon `.dmg` / `.zip`
 - **Linux:** `.AppImage`, Debian (`.deb`), Arch (`.pacman`), or portable `.tar.gz`
 
-The current stable artifacts are not code-signed or notarized. Your operating system may ask you to confirm that you trust the downloaded application. Verify the download against the release `SHA256SUMS.txt` before opening it.
+macOS builds now receive an ad-hoc signature for application integrity, including on Apple Silicon. They are not Developer ID signed or notarized; Windows builds are also unsigned. Your operating system may ask you to confirm that you trust the downloaded application. Verify the download against the release `SHA256SUMS.txt` before opening it.
+
+If macOS reports that an older Apple Silicon build is **damaged**, download a release containing the #228 signing fix. After verifying the download and moving **Scrcpy GUI.app** to **Applications**, use **System Settings → Privacy & Security → Open Anyway** if macOS blocks an unidentified developer. See [Apple's instructions](https://support.apple.com/en-us/102445). A valid ad-hoc signature does not replace Apple's notarization or remove Gatekeeper checks.
 
 Releases from v2.4.1 also include an SPDX SBOM and GitHub build-provenance attestations. After downloading an asset, verify its workflow identity with `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` in addition to checking the SHA-256 manifest.
 
 The exact automated checks, SBOM/provenance evidence, and unverified hardware matrix are recorded in the [v2.4.1 release smoke report](docs/RELEASE_SMOKE_V2.4.1.md). The earlier three-platform install/upgrade/uninstall evidence remains in the [v2.4.0 report](docs/RELEASE_SMOKE_V2.4.0.md).
+
+### Community Flatpak build
+
+Linux users can find a community-maintained Flatpak manifest and build instructions in [outusuke/io.github.simonaking.ScrcpyGui](https://github.com/outusuke/io.github.simonaking.ScrcpyGui), contributed in [#221](https://github.com/SimonAKing/scrcpy-gui/issues/221). It is maintained separately from the release packages above. Packaging-specific reports belong in that repository.
 
 ### Use another scrcpy installation
 
@@ -127,6 +133,8 @@ Save the current Settings as a named launch profile, then assign a profile to ea
 Choose a target in the control panel to click Back, Home, recent apps, Menu, volume, power, screen power, rotation, and touch-indicator controls without memorizing scrcpy shortcuts. **Screenshot** uses `adb exec-out screencap` and validates the PNG before saving it to the computer.
 
 Choose **Record actions**, use the control buttons, then stop and save the sequence. The Automations page can also build normalized tap/swipe, non-sensitive text, app-start, screenshot, delay, control, and device-assertion steps. Imported automations open as untrusted previews; arbitrary shell commands and persisted sensitive text are rejected.
+
+Recording interactions inside the separate scrcpy window, workflow variables, workflow file transfers, and local command execution are proposed in [#222](https://github.com/SimonAKing/scrcpy-gui/issues/222). See the [implementation plan and acceptance criteria](docs/AUTOMATION_ROADMAP.md) for the remaining work.
 
 Save selected devices as a Device group with a default launch profile and concurrency limit. Before launching, controlling, taking screenshots, pushing files, installing an APK, starting an app, or running an automation, the batch view shows online/authorization state, capabilities, session conflicts, target geometry, and the exact planned action for every device. Failed preflight items stay visible, partial runs never report overall success, and input/overwrite/downgrade actions require confirmation. Active automation runs can be canceled and their per-device reports are saved in Artifacts.
 

@@ -32,7 +32,7 @@ Scrcpy GUI 可以发现通过 USB 或无线调试连接的 Android 设备，并�
 
 ## scrcpy 是什么？
 
-scrcpy 是 Genymobile 维护的高性能轻量工具。它可以通过 USB 或 TCP/IP 显示并控制 Android 设备，不需要 Root，也不会在手机中留下安装应用。Scrcpy GUI 仍是独立前端；为简化安装，发布包会内置未经修改且完成校验的官方 scrcpy 包，并遵循 scrcpy 自身许可证。
+scrcpy 是 Genymobile 维护的高性能轻量工具。它可以通过 USB 或 TCP/IP 显示并控制 Android 设备，不需要 Root，也不会在手机中留下安装应用。Scrcpy GUI 仍是独立前端；为简化安装，发布包会内置完成校验的官方 scrcpy 包，并遵循 scrcpy 自身许可证。macOS 打包时会更新内置可执行文件的签名，不改变程序功能。
 
 ## 功能亮点
 
@@ -72,11 +72,17 @@ scrcpy 是 Genymobile 维护的高性能轻量工具。它可以通过 USB 或 T
 - **macOS：**Intel 或 Apple 芯片版本的 `.dmg` / `.zip`
 - **Linux：**`.AppImage`、Debian（`.deb`）、Arch（`.pacman`）或免安装 `.tar.gz`
 
-当前正式版构建尚未进行代码签名或公证，操作系统可能会要求你确认信任该应用。打开前请使用 Release 中的 `SHA256SUMS.txt` 校验下载文件。
+macOS 构建现会生成用于应用完整性校验的临时签名（ad-hoc），包括 Apple 芯片版本；尚未使用 Developer ID 签名或通过 Apple 公证，Windows 构建也尚未签名。操作系统可能会要求你确认信任该应用。打开前请使用 Release 中的 `SHA256SUMS.txt` 校验下载文件。
+
+如果旧版 Apple 芯片构建提示**应用已损坏**，请下载包含 #228 签名修复的版本。校验下载文件、将 **Scrcpy GUI.app** 移到**应用程序**后，如果 macOS 因开发者身份不明而阻止打开，可按 [Apple 的说明](https://support.apple.com/zh-cn/102445)，在**系统设置 → 隐私与安全性 → 仍要打开**中确认。临时签名不等于 Apple 公证，也不会取消 Gatekeeper 检查。
 
 从 v2.4.1 起，Release 还会附带 SPDX SBOM 和 GitHub 构建来源证明。下载资产后，除核对 SHA-256 清单外，还可运行 `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` 验证其工作流来源。
 
 本次实际执行的自动检查、SBOM/来源证明和尚未验证的硬件矩阵，记录在 [v2.4.1 Release smoke 报告](docs/RELEASE_SMOKE_V2.4.1.md)中。此前三平台安装、升级和卸载证据仍保留在 [v2.4.0 报告](docs/RELEASE_SMOKE_V2.4.0.md)中。
+
+### 社区 Flatpak 构建
+
+Linux 用户可在 [outusuke/io.github.simonaking.ScrcpyGui](https://github.com/outusuke/io.github.simonaking.ScrcpyGui) 查看社区维护的 Flatpak 清单和构建说明，由 [#221](https://github.com/SimonAKing/scrcpy-gui/issues/221) 提供。该项目与上述发布包分开维护，打包相关问题请在该仓库反馈。
 
 ### 使用其他 scrcpy 安装
 
