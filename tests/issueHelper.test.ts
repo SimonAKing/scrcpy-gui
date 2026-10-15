@@ -18,7 +18,7 @@ describe('issue helper', () => {
     expect(url.searchParams.has('body')).toBe(false)
     for (const key of ['reproduction', 'behavior', 'logs']) expect(url.searchParams.has(key)).toBe(false)
 
-    const form = readFileSync('.github/ISSUE_TEMPLATE/bug.yml', 'utf8')
+    const form = readFileSync('.github/ISSUE_TEMPLATE/bug.yml', 'utf8').replace(/\r\n/g, '\n')
     for (const key of ['version', 'scrcpy-version', 'os', 'diagnostics']) expect(form).toContain(`id: ${key}\n`)
     for (const key of ['reproduction', 'behavior', 'logs']) {
       const field = form.split('  - type: ').find((section) => section.includes(`id: ${key}\n`))
