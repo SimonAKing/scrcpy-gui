@@ -39,7 +39,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^24.10.13",
     "@vitejs/plugin-vue": "^6.0.8",
-    "electron": "^43.5.0",
+    "electron": "^43.8.1",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "typescript": "^5.9.3",
