@@ -41,7 +41,7 @@ import type {
   StructuredError,
   WirelessTarget
 } from '../shared/types'
-import { defaultPersistedConfig, legacyConfigView, selectLaunchScene } from '../shared/config'
+import { defaultPersistedConfig, launchForDevice, legacyConfigView, selectLaunchScene } from '../shared/config'
 import { operationErrorMessage } from '../shared/errors'
 import { translate } from './i18n'
 
@@ -283,19 +283,7 @@ const eventLevels: AppEventLevel[] = ['debug', 'info', 'warn', 'error']
 const eventDomains: AppEventDomain[] = ['runtime', 'device', 'session', 'config', 'automation', 'artifact', 'update']
 
 const runtimeSnapshot = () => ({ scrcpyPath: config.runtime.scrcpyPath })
-const launchSnapshot = (serial?: string): LaunchConfig => {
-  const profileId = serial ? config.deviceProfiles[serial] : ''
-  const profile = profileId ? config.profiles.find((item) => item.id === profileId) : undefined
-  const launch = structuredClone(toRaw(config.launch.scene === 'record-only' ? config.launch : profile?.launch || config.launch))
-  if (launch.scene === 'record-only') {
-    launch.recordEnabled = true
-    launch.autoRecordName = true
-    launch.recordFormat = 'mp4'
-  }
-  const alias = serial ? config.deviceAliases[serial]?.trim() : ''
-  if (alias && !launch.windowTitle.trim()) launch.windowTitle = alias
-  return launch
-}
+const launchSnapshot = (serial?: string): LaunchConfig => launchForDevice(toRaw(config), serial)
 
 async function persistConfig(): Promise<void> {
   if (!configReady) return
@@ -1651,7 +1639,7 @@ onBeforeUnmount(() => {
                 <small>{{ t('recordOnlyHint') }}</small>
               </div>
               <label><span>{{ t('recordDirectory') }}</span><div class="input-action"><input v-model="config.launch.recordDirectory" /><button class="ghost compact" @click="chooseRecordDirectory">{{ t('chooseFolder') }}</button></div></label>
-              <div class="field-pair"><label><span>{{ t('recordFormat') }}</span><input value="MP4" readonly /></label><label><span>{{ t('timeLimit') }}</span><input v-model.number="config.launch.timeLimit" type="number" min="0" max="86400" /></label></div>
+              <div class="field-pair"><label><span>{{ t('recordFormat') }}</span><select v-model="config.launch.recordFormat"><option value="default">{{ t('automatic') }}</option><option value="mp4">MP4</option><option value="mkv">MKV</option><template v-if="!config.launch.recordVideo"><option value="m4a">M4A</option><option value="mka">MKA</option><option value="opus">Opus</option><option value="aac">AAC</option><option value="flac">FLAC</option><option value="wav">WAV</option></template></select></label><label><span>{{ t('timeLimit') }}</span><input v-model.number="config.launch.timeLimit" type="number" min="0" max="86400" /></label></div>
               <div class="toggle-grid compact-grid"><label class="toggle"><input v-model="config.launch.recordVideo" type="checkbox" /><span>{{ t('recordVideo') }}</span></label><label class="toggle"><input v-model="config.launch.recordAudio" type="checkbox" /><span>{{ t('recordAudio') }}</span></label></div>
             </section>
 

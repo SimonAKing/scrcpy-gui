@@ -72,6 +72,8 @@ import { BatchAutomationService, type PreparedBatchResource } from './batchAutom
 import { automationTransferService } from './automationTransferService'
 import { readBoundedRegularUtf8File } from './safeFile'
 import { buildIssueHelperUrl } from './issueHelper'
+import { installOpenedApk } from './openApk'
+import { deviceShortcut } from './deviceShortcuts'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -95,8 +97,9 @@ let openingApk = false
 // Launch Services may deliver open-file before app.whenReady(), including on a cold start.
 app.on('open-file', (event, path) => {
   event.preventDefault()
+  if (isQuitting || pendingOpenApks.length >= 50 || pendingOpenApks.includes(path)) return
   pendingOpenApks.push(path)
-  if (app.isReady() && !mainWindow) createWindow()
+  if (app.isReady() && configRepository && !mainWindow) createWindow()
   void processQueuedOpenApks()
 })
 
@@ -246,6 +249,15 @@ function createWindow(): void {
     if (!rendererUrlIsTrusted(url)) event.preventDefault()
   })
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (process.platform !== 'darwin' || !mainWindow?.isFocused() ||
+        !rendererUrlIsTrusted(mainWindow.webContents.getURL())) return
+    const shortcut = deviceShortcut(input)
+    if (!shortcut) return
+    event.preventDefault()
+    if (shortcut.channel === 'app:screenshot-shortcut') mainWindow.webContents.send('app:screenshot-shortcut', shortcut.action)
+    else mainWindow.webContents.send('app:control-shortcut', shortcut.action)
+  })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.on('close', (event) => {
     if (minimizeToTray && !isQuitting) {
@@ -400,42 +412,35 @@ async function selectedFiles(paths: string[], extensions?: Set<string>): Promise
 }
 
 async function processQueuedOpenApks(): Promise<void> {
-  if (!app.isReady() || !mainWindow || openingApk) return
+  if (!app.isReady() || !mainWindow || !configRepository?.snapshot() || openingApk || isQuitting) return
   openingApk = true
   try {
-    while (pendingOpenApks.length) {
+    while (pendingOpenApks.length && mainWindow && !isQuitting) {
       const path = pendingOpenApks.shift()!
       mainWindow.show()
       mainWindow.focus()
       try {
         const [file] = await selectedFiles([path], new Set(['.apk']))
-        const runtime = runtimeConfig(quitRuntime)
-        const listed = await listDevices(runtime)
-        if (!listed.ok) throw new Error(listed.error?.message || 'Unable to list Android devices.')
-        const devices = (listed.data || []).filter((device) => device.state === 'device')
-        if (!devices.length) {
-          await dialog.showMessageBox(mainWindow, {
-            type: 'warning', message: `Cannot install ${file.name}`,
-            detail: 'Connect and authorize an Android device, then open the APK again.', buttons: ['OK']
-          })
-          continue
-        }
-        let target = devices[0]
-        if (devices.length > 1) {
-          const buttons = [...devices.map((device) => `${device.model} · ${device.serial}`), 'Cancel']
-          const choice = await dialog.showMessageBox(mainWindow, {
-            type: 'question', message: `Install ${file.name} on which device?`, buttons,
-            cancelId: buttons.length - 1, noLink: true
-          })
-          if (choice.response === buttons.length - 1) continue
-          target = devices[choice.response]
-        }
-        const batch = await deviceWorkspaceService.installApk(runtime, [target.serial], file, true, false, sendBatchProgress)
+        const runtime = runtimeConfig(configRepository.snapshot()!.runtime)
+        const installed = await installOpenedApk(runtime, file, {
+          listDevices,
+          showMessageBox: (options) => {
+            if (!mainWindow || mainWindow.isDestroyed() || isQuitting) throw new Error('APK opening canceled.')
+            return dialog.showMessageBox(mainWindow, options)
+          },
+          installApk: (...args) => {
+            if (!mainWindow || mainWindow.isDestroyed() || isQuitting) throw new Error('APK installation canceled.')
+            return deviceWorkspaceService.installApk(...args, sendBatchProgress)
+          }
+        })
+        if (!installed) continue
+        const { batch, target } = installed
         await artifactService?.registerTransferReport('apk-install', batch).catch((error) => eventStore.publish({
           level: 'error', domain: 'artifact', action: 'transfer-report-index-failed', stage: 'artifact-index',
           message: error instanceof Error ? error.message : String(error), data: { batchId: batch.id, operation: 'apk-install' }
         }))
         const result = batch.results[0]
+        if (!mainWindow || mainWindow.isDestroyed() || isQuitting) continue
         await dialog.showMessageBox(mainWindow, {
           type: result?.ok ? 'info' : 'error',
           message: result?.ok ? `${file.name} installed` : `Could not install ${file.name}`,
@@ -443,11 +448,15 @@ async function processQueuedOpenApks(): Promise<void> {
           buttons: ['OK']
         })
       } catch (error) {
+        if (!mainWindow || mainWindow.isDestroyed() || isQuitting) continue
         await dialog.showMessageBox(mainWindow, {
           type: 'error', message: 'Could not open APK', detail: error instanceof Error ? error.message : String(error), buttons: ['OK']
         })
       }
     }
+  } catch (error) {
+    eventStore.publish({ level: 'error', domain: 'device', action: 'apk-open-failed', stage: 'apk-open',
+      message: error instanceof Error ? error.message : String(error) })
   } finally {
     openingApk = false
   }
@@ -671,11 +680,15 @@ handle('dialog:record-directory', async () => {
   })
   return result.canceled ? '' : result.filePaths[0] || ''
 })
-handle('config:load', (_event, legacyJson: string, requestedLocale: Locale) => {
+handle('config:load', async (_event, legacyJson: string, requestedLocale: Locale) => {
   const legacy = boundedString(legacyJson, 'legacy config', 2 * 1024 * 1024, true)
   if (!['en', 'zh-CN', 'zh-TW', 'ru'].includes(requestedLocale)) throw new TypeError('locale is not supported.')
   if (!configRepository) throw new Error('Configuration repository is not ready.')
-  return configRepository.load(legacy, requestedLocale)
+  const loaded = await configRepository.load(legacy, requestedLocale)
+  quitRuntime = runtimeConfig(loaded.config.runtime)
+  killAdbOnQuit = loaded.config.killAdbOnQuit
+  void processQueuedOpenApks()
+  return loaded
 })
 handle('config:save', (_event, revision: number, config: PersistedConfig) => {
   if (!configRepository) throw new Error('Configuration repository is not ready.')
@@ -1118,27 +1131,6 @@ app.whenReady().then(() => {
   configureSessionSecurity()
   createWindow()
   createTray()
-  if (process.platform === 'darwin') {
-    for (const [accelerator, action] of [
-      ['Command+Shift+S', 'save'], ['Command+Shift+C', 'copy']
-    ] as const) {
-      if (!globalShortcut.register(accelerator, () => mainWindow?.webContents.send('app:screenshot-shortcut', action))) {
-        eventStore.publish({ level: 'warn', domain: 'artifact', action: 'shortcut-unavailable',
-          stage: 'shortcut', message: `${accelerator} could not be registered.` })
-      }
-    }
-    for (const [accelerator, action] of [
-      ['Command+Alt+R', 'auto-rotate'],
-      ['Command+Alt+T', 'show-touches-on'],
-      ['Command+Alt+Shift+T', 'show-touches-off']
-    ] as const) {
-      if (!globalShortcut.register(accelerator, () => mainWindow?.webContents.send('app:control-shortcut', action))) {
-        eventStore.publish({ level: 'warn', domain: 'device', action: 'shortcut-unavailable',
-          stage: 'shortcut', message: `${accelerator} could not be registered.` })
-      }
-    }
-  }
-  void processQueuedOpenApks()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
     else mainWindow?.show()

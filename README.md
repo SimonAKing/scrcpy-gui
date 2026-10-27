@@ -76,7 +76,7 @@ macOS builds now receive an ad-hoc signature for application integrity, includin
 
 If macOS reports that an older Apple Silicon build is **damaged**, download a release containing the #228 signing fix. After verifying the download and moving **Scrcpy GUI.app** to **Applications**, use **System Settings → Privacy & Security → Open Anyway** if macOS blocks an unidentified developer. See [Apple's instructions](https://support.apple.com/en-us/102445). A valid ad-hoc signature does not replace Apple's notarization or remove Gatekeeper checks.
 
-The locally built macOS app declares `.apk` as an openable file type. Double-clicking an APK in Finder installs it on the only authorized device, or asks you to choose when several devices are online. If another app is already the default for APKs, select Scrcpy GUI in Finder's **Get Info → Open with** and click **Change All**.
+The macOS app declares `.apk` as an openable file type. Double-clicking an APK in Finder asks you to confirm the file and authorized target device before installing. Replacing an existing app requires a separate checkbox; cancellation is the default. With multiple authorized devices, choose a target first. If another app is already the default for APKs, select Scrcpy GUI in Finder's **Get Info → Open with** and click **Change All**.
 
 Releases from v2.4.1 also include an SPDX SBOM and GitHub build-provenance attestations. After downloading an asset, verify its workflow identity with `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` in addition to checking the SHA-256 manifest.
 
@@ -156,7 +156,7 @@ The optional global Boss key immediately closes every active mirror and hides Sc
 
 On macOS, **System default** makes scrcpy use only Command (⌘) for `MOD`. Other platforms keep scrcpy's default. Control buttons display their shortcuts. Standard scrcpy shortcuts work when the mirror window has focus.
 
-Save a screenshot with `Cmd+Shift+S` or copy one with `Cmd+Shift+C`. Auto rotation, show touches, and hide touches use `Cmd+Option+R`, `Cmd+Option+T`, and `Cmd+Option+Shift+T`. Scrcpy GUI registers these five as global shortcuts, so they also occupy the same combinations in other apps while it is running.
+Save a screenshot with `Cmd+Shift+S` or copy one with `Cmd+Shift+C`. Auto rotation, show touches, and hide touches use `Cmd+Option+R`, `Cmd+Option+T`, and `Cmd+Option+Shift+T`. These five shortcuts work only while the Scrcpy GUI window has focus. They do not intercept shortcuts in other apps or the separate scrcpy mirror window.
 
 Common shortcuts include:
 

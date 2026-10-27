@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LaunchConfig } from '../src/shared/types'
-import { defaultLaunchConfig } from '../src/shared/config'
+import { backgroundRecordingLaunch, defaultLaunchConfig, defaultPersistedConfig, launchForDevice } from '../src/shared/config'
 import { analyzeExpertArgs, OPTION_DESCRIPTORS, serializeLaunchOptions } from '../src/shared/options'
 import { buildScrcpyArgDetails, prepareLaunchConfig } from '../src/main/scrcpy'
 import { SCENE_KINDS } from '../src/shared/scenes'
@@ -88,6 +88,37 @@ describe('expert argument policy', () => {
 })
 
 describe('command provenance', () => {
+  it('keeps assigned file-based recording profiles launchable without a recording folder', () => {
+    const config = defaultPersistedConfig('en')
+    const launch = { ...defaultLaunchConfig(), scene: 'record-only' as const, recordEnabled: true,
+      recordPath: '/recordings/profile.mkv', recordDirectory: '', recordFormat: 'mkv' as const }
+    config.profiles = [{ id: 'record', name: 'Recording', launch }]
+    config.deviceProfiles.PHONE = 'record'
+    const selected = launchForDevice(config, 'PHONE')
+    expect(selected).toEqual(launch)
+    expect(buildScrcpyArgDetails(prepareLaunchConfig(selected, 'PHONE'), 'PHONE').args)
+      .toContain('--record=/recordings/profile.mkv')
+    config.launch = { ...launch, recordPath: '/recordings/current.wav', recordFormat: 'default',
+      audioCodec: 'raw', recordVideo: false }
+    const folderRecording = launchForDevice(config, 'PHONE')
+    expect(folderRecording).toMatchObject({ autoRecordName: true, recordDirectory: '/recordings/', recordFormat: 'wav' })
+    expect(prepareLaunchConfig(folderRecording, 'PHONE').recordPath).toMatch(/\.wav$/)
+  })
+
+  it('restores a legacy recording folder without changing WAV/raw recording settings', () => {
+    const original = { ...defaultLaunchConfig(), scene: 'record-only' as const,
+      recordEnabled: true, recordPath: '/recordings/audio.wav', recordDirectory: '',
+      recordFormat: 'wav' as const, audioCodec: 'raw' as const, recordVideo: false }
+    const launch = backgroundRecordingLaunch(original)
+    const prepared = prepareLaunchConfig(launch, 'PHONE')
+    expect(prepared.recordPath).toMatch(/^\/recordings\/.*\.wav$/)
+    expect(buildScrcpyArgDetails(prepared, 'PHONE').args).toEqual(expect.arrayContaining([
+      '--record-format=wav', '--audio-codec=raw', '--no-video'
+    ]))
+    expect(original.autoRecordName).toBe(false)
+    expect(original.recordDirectory).toBe('')
+  })
+
   it('keeps an explicitly selected modifier instead of adding the macOS Command default', () => {
     const config = defaultLaunchConfig()
     config.shortcutModifier = 'lalt'

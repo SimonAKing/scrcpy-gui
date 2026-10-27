@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 2.5.0
+
+### Added
+
+- Add background recording start/stop controls, per-session status and elapsed time, and unique automatic filenames while retaining supported recording formats and existing file-based profiles (#235, thanks @Jadyli).
+- Add macOS screenshot and device-control shortcuts scoped to the focused Scrcpy GUI window, plus APK file associations with explicit installation confirmation and opt-in replacement (#235).
+
+### Security
+
+- Require confirmation before installing APKs opened by macOS, default to cancellation, and disable app replacement unless explicitly selected. Wait for saved runtime configuration before handling cold-start APK events, bound the pending file queue, and keep device shortcuts out of other applications (#235).
+
 ### Fixed
 
 - Explicitly ad-hoc sign macOS apps after packaging, fixing the invalid inherited Electron signature in Apple Silicon releases that could report the app as damaged (#228). Verify full application signatures in both macOS ZIP architectures before publishing. These builds remain unnotarized.

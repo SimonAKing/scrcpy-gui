@@ -98,6 +98,25 @@ export function previousRecordingDirectory(launch: Partial<LaunchConfig> = {}): 
   return launch.recordDirectory?.trim() || launch.recordPath?.trim().replace(/[^/\\]*$/, '') || ''
 }
 
+export function backgroundRecordingLaunch(launch: LaunchConfig): LaunchConfig {
+  const previousFormat = launch.recordPath.trim().match(/\.([a-z0-9]+)$/i)?.[1].toLowerCase()
+  const recordFormat = launch.recordFormat === 'default' && previousFormat &&
+    ['mp4', 'mkv', 'm4a', 'mka', 'opus', 'aac', 'flac', 'wav'].includes(previousFormat)
+    ? previousFormat as LaunchConfig['recordFormat'] : launch.recordFormat
+  return { ...launch, recordEnabled: true, autoRecordName: true, recordDirectory: previousRecordingDirectory(launch), recordFormat }
+}
+
+export function launchForDevice(config: PersistedConfig, serial?: string): LaunchConfig {
+  const profileId = serial ? config.deviceProfiles[serial] : ''
+  const profile = profileId ? config.profiles.find((item) => item.id === profileId) : undefined
+  const folderRecording = config.launch.scene === 'record-only'
+  let launch = structuredClone(folderRecording ? config.launch : profile?.launch || config.launch)
+  if (folderRecording) launch = backgroundRecordingLaunch(launch)
+  const alias = serial ? config.deviceAliases[serial]?.trim() : ''
+  if (alias && !launch.windowTitle.trim()) launch.windowTitle = alias
+  return launch
+}
+
 export function configView(config: AppConfigV3): PersistedConfig {
   const deviceProfiles: Record<string, string> = {}
   const deviceAliases: Record<string, string> = {}
