@@ -100,6 +100,8 @@ const selectedSerials = ref<string[]>([])
 const commandPreviews = ref<CommandPreview[]>([])
 const sessions = ref<ScrcpySession[]>([])
 const recordingBusy = ref(false)
+const recordingClock = ref(Date.now())
+let recordingTimer: ReturnType<typeof setInterval> | undefined
 const backgroundRecordings = computed(() => sessions.value.filter((session) =>
   session.scene === 'record-only' && sessionIsActive(session)))
 const canStartRecording = computed(() => Boolean(environment.value?.scrcpy.ok &&
@@ -469,6 +471,23 @@ function handleVisibilityChange(): void {
 
 function toggleSelectAll(): void {
   selectedSerials.value = allSelected.value ? [] : usableDevices.value.map((device) => device.serial)
+}
+
+watch(() => backgroundRecordings.value.length, (count) => {
+  recordingClock.value = Date.now()
+  if (count && !recordingTimer) {
+    recordingTimer = setInterval(() => { recordingClock.value = Date.now() }, 1000)
+  } else if (!count && recordingTimer) {
+    clearInterval(recordingTimer)
+    recordingTimer = undefined
+  }
+})
+
+function recordingDuration(session: ScrcpySession): string {
+  const started = Date.parse(session.startedAt || session.createdAt)
+  const seconds = Number.isFinite(started) ? Math.max(0, Math.floor((recordingClock.value - started) / 1000)) : 0
+  return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+    .map(value => String(value).padStart(2, '0')).join(':')
 }
 
 async function startRecording(): Promise<void> {
@@ -1492,6 +1511,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (recordingTimer) clearInterval(recordingTimer)
   removeStatusListener?.()
   removeSessionListener?.()
   removeDeviceListener?.()
@@ -1621,13 +1641,18 @@ onBeforeUnmount(() => {
                     <button class="danger compact" :disabled="recordingBusy || !backgroundRecordings.some(session => session.state !== 'stopping')" @click="stopRecording">{{ t('stopRecording') }}</button>
                   </div>
                 </div>
+                <div v-if="backgroundRecordings.length" class="recording-status-list">
+                  <div v-for="session in backgroundRecordings" :key="session.id" class="recording-status-bar" :class="{ running: session.state === 'running' }">
+                    <span class="recording-status-label" role="status"><i aria-hidden="true" />{{ session.state === 'running' ? t('recordingInProgress') : t(`sessionState_${session.state}`) }}</span>
+                    <span v-if="backgroundRecordings.length > 1" class="recording-status-device" :title="sessionDeviceLabel(session)">{{ sessionDeviceLabel(session) }}</span>
+                    <time class="recording-duration" :aria-label="t('recordingDuration')">{{ recordingDuration(session) }}</time>
+                  </div>
+                </div>
                 <small>{{ t('recordOnlyHint') }}</small>
               </div>
               <label><span>{{ t('recordDirectory') }}</span><div class="input-action"><input v-model="config.launch.recordDirectory" /><button class="ghost compact" @click="chooseRecordDirectory">{{ t('chooseFolder') }}</button></div></label>
               <div class="field-pair"><label><span>{{ t('recordFormat') }}</span><input value="MP4" readonly /></label><label><span>{{ t('timeLimit') }}</span><input v-model.number="config.launch.timeLimit" type="number" min="0" max="86400" /></label></div>
               <div class="toggle-grid compact-grid"><label class="toggle"><input v-model="config.launch.recordVideo" type="checkbox" /><span>{{ t('recordVideo') }}</span></label><label class="toggle"><input v-model="config.launch.recordAudio" type="checkbox" /><span>{{ t('recordAudio') }}</span></label></div>
-
-              <small v-if="backgroundRecordings.length">{{ t('activeRecordings') }}: {{ backgroundRecordings.length }}</small>
             </section>
 
             <section v-if="config.launch.scene === 'control-only' || config.launch.scene === 'otg'" class="scene-form-card">

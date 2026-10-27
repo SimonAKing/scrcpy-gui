@@ -90,3 +90,11 @@ input, select { height: 38px; padding: 0 10px; }textarea { padding: 10px; line-h
 
 .recording-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .recording-heading > strong, .recording-heading .button-row { flex-shrink: 0; }
+
+.recording-status-list { display: grid; gap: 8px; margin: 10px 0; }
+.recording-status-bar { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; border: 1px solid #f0d1cb; border-radius: 8px; background: #fff4f1; color: #a84839; font-size: 12px; }
+.recording-status-label { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; font-weight: 650; }
+.recording-status-label i { width: 7px; height: 7px; border-radius: 50%; background: #b98e84; }
+.recording-status-bar.running .recording-status-label i { background: #ee5943; box-shadow: 0 0 0 3px #ee59431a; }
+.recording-status-device { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recording-duration { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; flex-shrink: 0; }
