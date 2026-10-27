@@ -99,6 +99,13 @@ const devices = ref<Device[]>([])
 const selectedSerials = ref<string[]>([])
 const commandPreviews = ref<CommandPreview[]>([])
 const sessions = ref<ScrcpySession[]>([])
+const recordingBusy = ref(false)
+const backgroundRecordings = computed(() => sessions.value.filter((session) =>
+  session.scene === 'record-only' && sessionIsActive(session)))
+const canStartRecording = computed(() => Boolean(environment.value?.scrcpy.ok &&
+  selectedSerials.value.length && config.launch.recordDirectory.trim() &&
+  (config.launch.recordVideo || config.launch.recordAudio) && !recordingBusy.value &&
+  !backgroundRecordings.value.some((session) => selectedSerials.value.includes(session.serialAtLaunch))))
 const artifacts = ref<ArtifactRecord[]>([])
 const artifactKind = ref<ArtifactKind | 'all'>('all')
 const artifactDevice = ref('all')
@@ -277,7 +284,12 @@ const runtimeSnapshot = () => ({ scrcpyPath: config.runtime.scrcpyPath })
 const launchSnapshot = (serial?: string): LaunchConfig => {
   const profileId = serial ? config.deviceProfiles[serial] : ''
   const profile = profileId ? config.profiles.find((item) => item.id === profileId) : undefined
-  const launch = structuredClone(toRaw(profile?.launch || config.launch))
+  const launch = structuredClone(toRaw(config.launch.scene === 'record-only' ? config.launch : profile?.launch || config.launch))
+  if (launch.scene === 'record-only') {
+    launch.recordEnabled = true
+    launch.autoRecordName = true
+    launch.recordFormat = 'mp4'
+  }
   const alias = serial ? config.deviceAliases[serial]?.trim() : ''
   if (alias && !launch.windowTitle.trim()) launch.windowTitle = alias
   return launch
@@ -459,7 +471,34 @@ function toggleSelectAll(): void {
   selectedSerials.value = allSelected.value ? [] : usableDevices.value.map((device) => device.serial)
 }
 
+async function startRecording(): Promise<void> {
+  if (!canStartRecording.value) return
+  recordingBusy.value = true
+  try {
+    const launches = selectedSerials.value.map((serial) => ({ serial, launch: launchSnapshot(serial) }))
+    const result = await window.scrcpy.start(runtimeSnapshot(), launches)
+    if (!result.ok) toast('error', operationErrorMessage(result, t('operationFailed')))
+  } catch (error) {
+    toast('error', String(error))
+  } finally {
+    recordingBusy.value = false
+  }
+}
+
+async function stopRecording(): Promise<void> {
+  recordingBusy.value = true
+  try {
+    await Promise.all(backgroundRecordings.value.filter((session) => session.state !== 'stopping')
+      .map((session) => stopSession(session.id)))
+  } catch (error) {
+    toast('error', String(error))
+  } finally {
+    recordingBusy.value = false
+  }
+}
+
 async function launchSelected(): Promise<void> {
+  if (config.launch.scene === 'record-only') return startRecording()
   if (config.launch.scene === 'otg') {
     const result = await window.scrcpy.startOtg(runtimeSnapshot(), launchSnapshot(), otgUsbSerial.value.trim())
     if (!result.ok) toast('error', operationErrorMessage(result, t('operationFailed')))
@@ -487,11 +526,11 @@ async function previewSelected(): Promise<void> {
   const launches = selectedSerials.value.map((serial) => {
     const profileId = config.deviceProfiles[serial]
     const profile = profileId ? config.profiles.find((item) => item.id === profileId) : undefined
-    const baseLaunch = profile?.launch || config.launch
+    const baseLaunch = config.launch.scene === 'record-only' ? config.launch : profile?.launch || config.launch
     return {
       serial,
       launch: launchSnapshot(serial),
-      source: profile ? 'profile' as const : 'global' as const,
+      source: profile && config.launch.scene !== 'record-only' ? 'profile' as const : 'global' as const,
       profileName: profile?.name,
       deviceWindowTitleOverride: Boolean(config.deviceAliases[serial]?.trim() && !baseLaunch.windowTitle.trim())
     }
@@ -1522,7 +1561,7 @@ onBeforeUnmount(() => {
             <button class="ghost" :disabled="loadingDevices" @click="refreshDevices(true)">{{ t('refresh') }}</button>
             <button class="ghost" :disabled="!usableDevices.length" @click="toggleSelectAll">{{ t('selectAll') }}</button>
             <button class="ghost" :disabled="config.launch.scene !== 'otg' && !selectedSerials.length" @click="previewSelected">{{ t('previewCommand') }}</button>
-            <button class="primary" :disabled="!environment?.scrcpy.ok || config.launch.scene !== 'otg' && !selectedSerials.length" @click="launchSelected">{{ config.launch.scene === 'otg' ? t('launchOtg') : t('launchSelected') }}</button>
+            <button class="primary" :disabled="config.launch.scene === 'record-only' ? !canStartRecording : !environment?.scrcpy.ok || config.launch.scene !== 'otg' && !selectedSerials.length" @click="launchSelected">{{ config.launch.scene === 'record-only' ? t('startRecording') : config.launch.scene === 'otg' ? t('launchOtg') : t('launchSelected') }}</button>
           </div>
         </section>
 
@@ -1574,10 +1613,21 @@ onBeforeUnmount(() => {
             </section>
 
             <section v-if="config.launch.scene === 'record-only'" class="scene-form-card">
-              <div><strong>{{ t('recordOnlySetup') }}</strong><small>{{ t('recordOnlyHint') }}</small></div>
-              <label v-if="config.launch.autoRecordName"><span>{{ t('recordDirectory') }}</span><div class="input-action"><input v-model="config.launch.recordDirectory" /><button class="ghost compact" @click="chooseRecordDirectory">{{ t('chooseFolder') }}</button></div></label><label v-else><span>{{ t('recordPath') }}</span><div class="input-action"><input v-model="config.launch.recordPath" /><button class="ghost compact" @click="chooseRecordPath">{{ t('chooseFile') }}</button></div></label>
-              <div class="field-pair"><label><span>{{ t('recordFormat') }}</span><select v-model="config.launch.recordFormat"><option value="default">{{ t('automatic') }}</option><option value="mp4">MP4</option><option value="mkv">MKV</option><template v-if="!config.launch.recordVideo"><option value="m4a">M4A</option><option value="mka">MKA</option><option value="opus">Opus</option><option value="aac">AAC</option><option value="flac">FLAC</option><option value="wav">WAV</option></template></select></label><label><span>{{ t('timeLimit') }}</span><input v-model.number="config.launch.timeLimit" type="number" min="0" max="86400" /></label></div>
-              <div class="toggle-grid compact-grid"><label class="toggle"><input v-model="config.launch.autoRecordName" type="checkbox" /><span>{{ t('autoRecordName') }}</span></label><label class="toggle"><input v-model="config.launch.recordVideo" type="checkbox" /><span>{{ t('recordVideo') }}</span></label><label class="toggle"><input v-model="config.launch.recordAudio" type="checkbox" /><span>{{ t('recordAudio') }}</span></label></div>
+              <div>
+                <div class="recording-heading">
+                  <strong>{{ t('recordOnlySetup') }}</strong>
+                  <div class="button-row nowrap">
+                    <button class="primary compact" :disabled="!canStartRecording" @click="startRecording">{{ t('startRecording') }}</button>
+                    <button class="danger compact" :disabled="recordingBusy || !backgroundRecordings.some(session => session.state !== 'stopping')" @click="stopRecording">{{ t('stopRecording') }}</button>
+                  </div>
+                </div>
+                <small>{{ t('recordOnlyHint') }}</small>
+              </div>
+              <label><span>{{ t('recordDirectory') }}</span><div class="input-action"><input v-model="config.launch.recordDirectory" /><button class="ghost compact" @click="chooseRecordDirectory">{{ t('chooseFolder') }}</button></div></label>
+              <div class="field-pair"><label><span>{{ t('recordFormat') }}</span><input value="MP4" readonly /></label><label><span>{{ t('timeLimit') }}</span><input v-model.number="config.launch.timeLimit" type="number" min="0" max="86400" /></label></div>
+              <div class="toggle-grid compact-grid"><label class="toggle"><input v-model="config.launch.recordVideo" type="checkbox" /><span>{{ t('recordVideo') }}</span></label><label class="toggle"><input v-model="config.launch.recordAudio" type="checkbox" /><span>{{ t('recordAudio') }}</span></label></div>
+
+              <small v-if="backgroundRecordings.length">{{ t('activeRecordings') }}: {{ backgroundRecordings.length }}</small>
             </section>
 
             <section v-if="config.launch.scene === 'control-only' || config.launch.scene === 'otg'" class="scene-form-card">
@@ -1594,7 +1644,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="scene-builder-actions">
             <span>{{ config.launch.scene === 'otg' ? t('automaticUsbTarget') : `${t('selectedTargets')}: ${selectedSerials.length}` }}</span>
-            <div class="button-row"><button class="ghost" :disabled="config.launch.scene !== 'otg' && !selectedSerials.length" @click="previewSelected">{{ t('previewCommand') }}</button><button class="primary" :disabled="!environment?.scrcpy.ok || config.launch.scene !== 'otg' && !selectedSerials.length" @click="launchSelected">{{ config.launch.scene === 'otg' ? t('launchOtg') : t('launchSelected') }}</button></div>
+            <div class="button-row"><button class="ghost" :disabled="config.launch.scene !== 'otg' && !selectedSerials.length" @click="previewSelected">{{ t('previewCommand') }}</button><button class="primary" :disabled="config.launch.scene === 'record-only' ? !canStartRecording : !environment?.scrcpy.ok || config.launch.scene !== 'otg' && !selectedSerials.length" @click="launchSelected">{{ config.launch.scene === 'record-only' ? t('startRecording') : config.launch.scene === 'otg' ? t('launchOtg') : t('launchSelected') }}</button></div>
           </div>
         </section>
 

@@ -2,6 +2,7 @@ import type { CommandArgDetail, CommandArgSource, Device, DeviceState, LaunchCon
 import { analyzeExpertArgs, serializeLaunchOptions, validatePortRange } from '../shared/options'
 import { serializeSceneOptions, type HostPlatform } from '../shared/scenes'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 export { validatePortRange } from '../shared/options'
 
@@ -130,8 +131,9 @@ export function prepareLaunchConfig(config: LaunchConfig, serial: string, now = 
   if (!config.recordDirectory.trim()) throw new Error('Choose a recording folder for automatic filenames.')
   const safeSerial = serial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
   const timestamp = now.toISOString().replaceAll(':', '-').slice(0, 19)
+  const suffix = config.scene === 'record-only' ? `-${randomUUID()}` : ''
   const extension = config.recordFormat === 'default' ? 'mp4' : config.recordFormat
-  return { ...config, recordPath: join(config.recordDirectory.trim(), `scrcpy-${safeSerial}-${timestamp}.${extension}`) }
+  return { ...config, recordPath: join(config.recordDirectory.trim(), `scrcpy-${safeSerial}-${timestamp}${suffix}.${extension}`) }
 }
 
 export function buildScrcpyArgs(config: LaunchConfig, serial: string): string[] {

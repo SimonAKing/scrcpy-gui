@@ -111,6 +111,21 @@ describe('command provenance', () => {
     expect(preview.warnings).toHaveLength(1)
   })
 
+  it('gives background recordings distinct MP4 paths even when started at the same time', () => {
+    const config = { ...defaultLaunchConfig(), scene: 'record-only' as const,
+      recordEnabled: true, autoRecordName: true, recordFormat: 'mp4' as const,
+      recordDirectory: '/tmp/recordings with spaces' }
+    const now = new Date('2026-10-27T03:00:00Z')
+    const first = prepareLaunchConfig(config, 'device:5555', now)
+    const second = prepareLaunchConfig(config, 'device:5555', now)
+    expect(first.recordPath).toMatch(/^\/tmp\/recordings with spaces\/scrcpy-device-5555-.*\.mp4$/)
+    expect(second.recordPath).not.toBe(first.recordPath)
+    expect(buildScrcpyArgDetails(first, 'device:5555').args).toEqual(expect.arrayContaining([
+      `--record=${first.recordPath}`, '--record-format=mp4', '--no-playback', '--no-window'
+    ]))
+    expect(() => prepareLaunchConfig({ ...config, recordDirectory: '  ' }, 'device')).toThrow(/folder/)
+  })
+
   it('creates deterministic automatic recording names and marks their argv generated', () => {
     const config = defaultLaunchConfig()
     config.recordEnabled = true

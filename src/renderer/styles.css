@@ -87,3 +87,6 @@ input, select { height: 38px; padding: 0 10px; }textarea { padding: 10px; line-h
 }
 
 @keyframes recording-pulse { 50% { border-color: #e65e4a; box-shadow: 0 0 0 4px #e65e4a18; } }
+
+.recording-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.recording-heading > strong, .recording-heading .button-row { flex-shrink: 0; }

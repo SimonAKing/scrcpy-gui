@@ -94,6 +94,10 @@ export function legacyConfigView(value: unknown, locale: Locale): PersistedConfi
   }
 }
 
+export function previousRecordingDirectory(launch: Partial<LaunchConfig> = {}): string {
+  return launch.recordDirectory?.trim() || launch.recordPath?.trim().replace(/[^/\\]*$/, '') || ''
+}
+
 export function configView(config: AppConfigV3): PersistedConfig {
   const deviceProfiles: Record<string, string> = {}
   const deviceAliases: Record<string, string> = {}
@@ -106,7 +110,7 @@ export function configView(config: AppConfigV3): PersistedConfig {
   const serialByDeviceId = new Map(config.knownDevices.map((device) => [device.id, device.lastSerial]))
   return {
     runtime: { scrcpyPath: config.runtime.mode === 'custom' ? config.runtime.customScrcpyPath : '' },
-    launch: structuredClone(config.defaults.launch), profiles: structuredClone(config.profiles), deviceProfiles,
+    launch: { ...structuredClone(config.defaults.launch), recordDirectory: previousRecordingDirectory(config.defaults.launch) }, profiles: structuredClone(config.profiles), deviceProfiles,
     deviceAliases, wirelessTargets: structuredClone(config.wirelessTargets), automations: structuredClone(config.automations),
     groups: config.groups.map((group) => ({
       id: group.id,
