@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { basename, dirname, join } from 'node:path'
 import type { LaunchConfig } from '../src/shared/types'
 import { backgroundRecordingLaunch, defaultLaunchConfig, defaultPersistedConfig, launchForDevice } from '../src/shared/config'
 import { analyzeExpertArgs, OPTION_DESCRIPTORS, serializeLaunchOptions } from '../src/shared/options'
@@ -111,7 +112,8 @@ describe('command provenance', () => {
       recordFormat: 'wav' as const, audioCodec: 'raw' as const, recordVideo: false }
     const launch = backgroundRecordingLaunch(original)
     const prepared = prepareLaunchConfig(launch, 'PHONE')
-    expect(prepared.recordPath).toMatch(/^\/recordings\/.*\.wav$/)
+    expect(dirname(prepared.recordPath)).toBe(join('/recordings'))
+    expect(basename(prepared.recordPath)).toMatch(/^scrcpy-PHONE-.*\.wav$/)
     expect(buildScrcpyArgDetails(prepared, 'PHONE').args).toEqual(expect.arrayContaining([
       '--record-format=wav', '--audio-codec=raw', '--no-video'
     ]))
@@ -149,7 +151,8 @@ describe('command provenance', () => {
     const now = new Date('2026-10-27T03:00:00Z')
     const first = prepareLaunchConfig(config, 'device:5555', now)
     const second = prepareLaunchConfig(config, 'device:5555', now)
-    expect(first.recordPath).toMatch(/^\/tmp\/recordings with spaces\/scrcpy-device-5555-.*\.mp4$/)
+    expect(dirname(first.recordPath)).toBe(join('/tmp/recordings with spaces'))
+    expect(basename(first.recordPath)).toMatch(/^scrcpy-device-5555-.*\.mp4$/)
     expect(second.recordPath).not.toBe(first.recordPath)
     expect(buildScrcpyArgDetails(first, 'device:5555').args).toEqual(expect.arrayContaining([
       `--record=${first.recordPath}`, '--record-format=mp4', '--no-playback', '--no-window'
