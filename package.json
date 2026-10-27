@@ -1,6 +1,6 @@
 {
   "name": "scrcpy-gui",
-  "version": "2.4.5",
+  "version": "2.5.0",
   "description": "A modern, secure desktop GUI for scrcpy",
   "author": "Simon Ma <simon@tomotoes.com>",
   "homepage": "https://github.com/SimonAKing/scrcpy-gui",
@@ -39,12 +39,12 @@
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^24.10.13",
     "@vitejs/plugin-vue": "^6.0.8",
-    "electron": "^43.5.0",
+    "electron": "^43.8.3",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "typescript": "^5.9.3",
-    "vite": "^7.3.6",
-    "vitest": "^4.1.11",
+    "vite": "^7.3.7",
+    "vitest": "^4.1.12",
     "vue-tsc": "^3.3.10"
   },
   "build": {
@@ -83,6 +83,14 @@
       "identity": "-",
       "hardenedRuntime": false,
       "category": "public.app-category.utilities",
+      "fileAssociations": [
+        {
+          "ext": "apk",
+          "name": "Android APK",
+          "role": "Editor",
+          "rank": "Default"
+        }
+      ],
       "target": [
         "dmg",
         "zip"

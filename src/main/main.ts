@@ -1,5 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, session, shell, Tray } from 'electron'
-import { basename, extname, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { mkdir, stat, writeFile } from 'node:fs/promises'
@@ -72,6 +72,8 @@ import { BatchAutomationService, type PreparedBatchResource } from './batchAutom
 import { automationTransferService } from './automationTransferService'
 import { readBoundedRegularUtf8File } from './safeFile'
 import { buildIssueHelperUrl } from './issueHelper'
+import { installOpenedApk } from './openApk'
+import { deviceShortcut } from './deviceShortcuts'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -89,6 +91,17 @@ let lastDiagnosticScrcpyVersion = ''
 const eventStore = new EventStore()
 const rendererEntryUrl = pathToFileURL(join(__dirname, '../renderer/index.html')).toString()
 const SHUTDOWN_TIMEOUT_MS = 5_000
+const pendingOpenApks: string[] = []
+let openingApk = false
+
+// Launch Services may deliver open-file before app.whenReady(), including on a cold start.
+app.on('open-file', (event, path) => {
+  event.preventDefault()
+  if (isQuitting || pendingOpenApks.length >= 50 || pendingOpenApks.includes(path)) return
+  pendingOpenApks.push(path)
+  if (app.isReady() && configRepository && !mainWindow) createWindow()
+  void processQueuedOpenApks()
+})
 
 function rendererUrlIsTrusted(url: string): boolean {
   return isTrustedRendererUrl(url, rendererEntryUrl, process.env.ELECTRON_RENDERER_URL)
@@ -236,6 +249,15 @@ function createWindow(): void {
     if (!rendererUrlIsTrusted(url)) event.preventDefault()
   })
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (process.platform !== 'darwin' || !mainWindow?.isFocused() ||
+        !rendererUrlIsTrusted(mainWindow.webContents.getURL())) return
+    const shortcut = deviceShortcut(input)
+    if (!shortcut) return
+    event.preventDefault()
+    if (shortcut.channel === 'app:screenshot-shortcut') mainWindow.webContents.send('app:screenshot-shortcut', shortcut.action)
+    else mainWindow.webContents.send('app:control-shortcut', shortcut.action)
+  })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
   mainWindow.on('close', (event) => {
     if (minimizeToTray && !isQuitting) {
@@ -387,6 +409,57 @@ async function selectedFiles(paths: string[], extensions?: Set<string>): Promise
     if (extensions && !extensions.has(extname(name).toLowerCase())) throw new TypeError(`${name} is not a supported package file.`)
     return { path, name, size: info.size }
   }))
+}
+
+async function processQueuedOpenApks(): Promise<void> {
+  if (!app.isReady() || !mainWindow || !configRepository?.snapshot() || openingApk || isQuitting) return
+  openingApk = true
+  try {
+    while (pendingOpenApks.length && mainWindow && !isQuitting) {
+      const path = pendingOpenApks.shift()!
+      mainWindow.show()
+      mainWindow.focus()
+      try {
+        const [file] = await selectedFiles([path], new Set(['.apk']))
+        const runtime = runtimeConfig(configRepository.snapshot()!.runtime)
+        const installed = await installOpenedApk(runtime, file, {
+          listDevices,
+          showMessageBox: (options) => {
+            if (!mainWindow || mainWindow.isDestroyed() || isQuitting) throw new Error('APK opening canceled.')
+            return dialog.showMessageBox(mainWindow, options)
+          },
+          installApk: (...args) => {
+            if (!mainWindow || mainWindow.isDestroyed() || isQuitting) throw new Error('APK installation canceled.')
+            return deviceWorkspaceService.installApk(...args, sendBatchProgress)
+          }
+        })
+        if (!installed) continue
+        const { batch, target } = installed
+        await artifactService?.registerTransferReport('apk-install', batch).catch((error) => eventStore.publish({
+          level: 'error', domain: 'artifact', action: 'transfer-report-index-failed', stage: 'artifact-index',
+          message: error instanceof Error ? error.message : String(error), data: { batchId: batch.id, operation: 'apk-install' }
+        }))
+        const result = batch.results[0]
+        if (!mainWindow || mainWindow.isDestroyed() || isQuitting) continue
+        await dialog.showMessageBox(mainWindow, {
+          type: result?.ok ? 'info' : 'error',
+          message: result?.ok ? `${file.name} installed` : `Could not install ${file.name}`,
+          detail: result?.ok ? `Device: ${target.model} · ${target.serial}` : result?.error?.detail || result?.error?.message || 'Installation failed.',
+          buttons: ['OK']
+        })
+      } catch (error) {
+        if (!mainWindow || mainWindow.isDestroyed() || isQuitting) continue
+        await dialog.showMessageBox(mainWindow, {
+          type: 'error', message: 'Could not open APK', detail: error instanceof Error ? error.message : String(error), buttons: ['OK']
+        })
+      }
+    }
+  } catch (error) {
+    eventStore.publish({ level: 'error', domain: 'device', action: 'apk-open-failed', stage: 'apk-open',
+      message: error instanceof Error ? error.message : String(error) })
+  } finally {
+    openingApk = false
+  }
 }
 
 async function prepareDiagnostics(runtime: RuntimeConfig, allowDraft: boolean): Promise<PreparedDiagnostics> {
@@ -607,11 +680,15 @@ handle('dialog:record-directory', async () => {
   })
   return result.canceled ? '' : result.filePaths[0] || ''
 })
-handle('config:load', (_event, legacyJson: string, requestedLocale: Locale) => {
+handle('config:load', async (_event, legacyJson: string, requestedLocale: Locale) => {
   const legacy = boundedString(legacyJson, 'legacy config', 2 * 1024 * 1024, true)
   if (!['en', 'zh-CN', 'zh-TW', 'ru'].includes(requestedLocale)) throw new TypeError('locale is not supported.')
   if (!configRepository) throw new Error('Configuration repository is not ready.')
-  return configRepository.load(legacy, requestedLocale)
+  const loaded = await configRepository.load(legacy, requestedLocale)
+  quitRuntime = runtimeConfig(loaded.config.runtime)
+  killAdbOnQuit = loaded.config.killAdbOnQuit
+  void processQueuedOpenApks()
+  return loaded
 })
 handle('config:save', (_event, revision: number, config: PersistedConfig) => {
   if (!configRepository) throw new Error('Configuration repository is not ready.')
@@ -879,8 +956,18 @@ handle('device:screenshot', async (_event, runtime: RuntimeConfig, serial: strin
   const validatedSerial = deviceSerial(serial)
   const safeSerial = validatedSerial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
   const timestamp = new Date().toISOString().replaceAll(':', '-').slice(0, 19)
-  const screenshotDirectory = join(app.getPath('pictures'), 'Scrcpy GUI')
-  await mkdir(screenshotDirectory, { recursive: true })
+  const fallbackDirectory = join(app.getPath('pictures'), 'Scrcpy GUI')
+  let screenshotDirectory = fallbackDirectory
+  try {
+    const [lastScreenshot] = await artifactService?.list({ limit: 1, kinds: ['screenshot'] }) || []
+    if (lastScreenshot) {
+      const previousDirectory = dirname(lastScreenshot.path)
+      if ((await stat(previousDirectory)).isDirectory()) screenshotDirectory = previousDirectory
+    }
+  } catch {
+    // A missing previous folder or unavailable artifact index should not block saving.
+  }
+  if (screenshotDirectory === fallbackDirectory) await mkdir(fallbackDirectory, { recursive: true })
   const result = await dialog.showSaveDialog({
     title: 'Save device screenshot',
     defaultPath: join(screenshotDirectory, `scrcpy-${safeSerial}-${timestamp}.png`),

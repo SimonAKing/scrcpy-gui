@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ConfigRepository } from '../src/main/configRepository'
-import { defaultPersistedConfig } from '../src/shared/config'
+import { defaultPersistedConfig, previousRecordingDirectory } from '../src/shared/config'
 
 const temporaryDirectories: string[] = []
 const fixedNow = new Date('2026-08-15T12:00:00.000Z')
@@ -255,5 +255,19 @@ describe('ConfigRepository', () => {
     await expect(new ConfigRepository(directory).load('', 'en')).rejects.toThrow('newer than supported')
     expect(await readFile(join(directory, 'config.json'), 'utf8')).toBe(future)
     await expect(readFile(join(directory, 'config.backup.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+})
+
+
+describe('recording folder restoration', () => {
+  it('keeps the last selected folder ahead of the legacy file path', () => {
+    expect(previousRecordingDirectory({ recordDirectory: '/tmp/latest', recordPath: '/tmp/old/video.mp4' }))
+      .toBe('/tmp/latest')
+  })
+
+  it('restores the folder of the previous recording file for existing installations', () => {
+    expect(previousRecordingDirectory({ recordPath: '/tmp/previous/video.mp4' })).toBe('/tmp/previous/')
+    expect(previousRecordingDirectory({ recordPath: 'video.mp4' })).toBe('')
+    expect(previousRecordingDirectory()).toBe('')
   })
 })

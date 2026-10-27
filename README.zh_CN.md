@@ -76,6 +76,8 @@ macOS 构建现会生成用于应用完整性校验的临时签名（ad-hoc）�
 
 如果旧版 Apple 芯片构建提示**应用已损坏**，请下载包含 #228 签名修复的版本。校验下载文件、将 **Scrcpy GUI.app** 移到**应用程序**后，如果 macOS 因开发者身份不明而阻止打开，可按 [Apple 的说明](https://support.apple.com/zh-cn/102445)，在**系统设置 → 隐私与安全性 → 仍要打开**中确认。临时签名不等于 Apple 公证，也不会取消 Gatekeeper 检查。
 
+macOS 应用声明可打开 `.apk`。在 Finder 双击 APK 时，Scrcpy GUI 会先确认文件和已授权目标设备，再执行安装；默认取消，覆盖现有应用需要单独勾选。多台设备在线时会先让你选择目标。若 macOS 已把 APK 关联到其他程序，在 Finder 的「显示简介 → 打开方式」中选择 Scrcpy GUI 并点击「全部更改」。
+
 从 v2.4.1 起，Release 还会附带 SPDX SBOM 和 GitHub 构建来源证明。下载资产后，除核对 SHA-256 清单外，还可运行 `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` 验证其工作流来源。
 
 本次实际执行的自动检查、SBOM/来源证明和尚未验证的硬件矩阵，记录在 [v2.4.1 Release smoke 报告](docs/RELEASE_SMOKE_V2.4.1.md)中。此前三平台安装、升级和卸载证据仍保留在 [v2.4.0 报告](docs/RELEASE_SMOKE_V2.4.0.md)中。
@@ -150,7 +152,11 @@ Linux 用户可使用发行版中的新版本软件包，或参考 scrcpy 官方
 
 ## scrcpy 快捷键
 
-快捷键修饰键由 scrcpy 管理，平台之间可能不同。除非确实需要修改，否则建议保留「系统默认」。常用快捷键包括：
+macOS 上「系统默认」会让本应用启动的 scrcpy 只使用 Command（⌘）作为 `MOD`；其他平台仍使用 scrcpy 默认值。控制按钮会显示对应按键。scrcpy 原生控制快捷键在投屏窗口获得焦点时生效。
+
+保存截图使用 `⌘⇧S`，复制截图使用 `⌘⇧C`；自动旋转、显示触摸、关闭触摸显示分别使用 `⌘⌥R`、`⌘⌥T`、`⌘⌥⇧T`。这五组仅在 Scrcpy GUI 主窗口获得焦点时生效，不会占用其他应用或独立投屏窗口中的快捷键。
+
+常用快捷键包括：
 
 | 操作 | 快捷键 |
 | --- | --- |
@@ -165,7 +171,7 @@ Linux 用户可使用发行版中的新版本软件包，或参考 scrcpy 官方
 | 复制 / 剪切 / 粘贴 | `MOD` + `c` / `x` / `v` |
 | 显示或隐藏 FPS | `MOD` + `i` |
 
-完整列表请查看当前 [scrcpy 控制文档](https://github.com/Genymobile/scrcpy/blob/master/doc/control.md)。文件拖放、APK 安装、剪贴板同步和这些快捷键都由启动后的 scrcpy 窗口提供。
+完整列表请查看当前 [scrcpy 控制文档](https://github.com/Genymobile/scrcpy/blob/master/doc/control.md)。投屏窗口提供文件拖放和剪贴板快捷键；Finder 中的 APK 双击安装由 Scrcpy GUI 处理。
 
 ## 常见问题排查
 

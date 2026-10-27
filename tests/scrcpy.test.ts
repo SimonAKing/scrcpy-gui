@@ -119,7 +119,7 @@ describe('validateDeviceAddress', () => {
 })
 
 describe('buildScrcpyArgs', () => {
-  it('uses current scrcpy 4.x flags without overriding normal Ctrl shortcuts', () => {
+  it('uses Command only as the default macOS shortcut modifier', () => {
     const args = buildScrcpyArgs(
       config({
         videoBitRate: 12,
@@ -139,9 +139,10 @@ describe('buildScrcpyArgs', () => {
       '--max-size=1920',
       '--max-fps=60',
       '--orientation=90',
-      '--no-audio'
+      '--no-audio',
+      ...(process.platform === 'darwin' ? ['--shortcut-mod=lsuper'] : [])
     ])
-    expect(args.some((arg) => arg.startsWith('--shortcut-mod'))).toBe(false)
+    expect(args.some((arg) => arg.startsWith('--shortcut-mod'))).toBe(process.platform === 'darwin')
   })
 
   it('builds recording, crop and window arguments', () => {

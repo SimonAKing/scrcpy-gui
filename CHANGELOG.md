@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 2.5.0
+
+### Added
+
+- Add background recording start/stop controls, per-session status and elapsed time, and unique automatic filenames while retaining supported recording formats and existing file-based profiles (#235, thanks @Jadyli).
+- Add macOS screenshot and device-control shortcuts scoped to the focused Scrcpy GUI window, plus APK file associations with explicit installation confirmation and opt-in replacement (#235).
+
+### Security
+
+- Update Electron to 43.8.3, Vite to 7.3.7, Vitest and its mocker to 4.1.12, fast-uri to 3.1.9, http-cache-semantics to 4.3.0, and Undici to 6.29.1 / 7.30.1 to resolve the dependency advisories reported during release review.
+- Require confirmation before installing APKs opened by macOS, default to cancellation, and disable app replacement unless explicitly selected. Wait for saved runtime configuration before handling cold-start APK events, bound the pending file queue, and keep device shortcuts out of other applications (#235).
+
 ### Fixed
 
 - Explicitly ad-hoc sign macOS apps after packaging, fixing the invalid inherited Electron signature in Apple Silicon releases that could report the app as damaged (#228). Verify full application signatures in both macOS ZIP architectures before publishing. These builds remain unnotarized.
@@ -9,7 +21,7 @@
 
 ### Changed
 
-- Update Electron to 43.5.0, Undici to 6.29.0 / 7.30.0, and brace-expansion to 1.1.21 / 2.1.7 / 5.0.12 (#224, #225, #227).
+- Update brace-expansion to 1.1.21 / 2.1.7 / 5.0.12 (#227).
 - Update Vue and its matching compiler/runtime packages to 3.5.44 and source-map-js to 1.2.2, including upstream server-renderer attribute validation and source-map offset validation fixes (#229, #230).
 - Document the community-maintained Flatpak build (#221) and the phased advanced automation proposal (#222).
 

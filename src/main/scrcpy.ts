@@ -2,6 +2,7 @@ import type { CommandArgDetail, CommandArgSource, Device, DeviceState, LaunchCon
 import { analyzeExpertArgs, serializeLaunchOptions, validatePortRange } from '../shared/options'
 import { serializeSceneOptions, type HostPlatform } from '../shared/scenes'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 export { validatePortRange } from '../shared/options'
 
@@ -112,6 +113,14 @@ export function buildScrcpyArgDetails(
       })
     }
   }
+  // On macOS, use Command alone for scrcpy shortcuts. The upstream default also
+  // accepts Option, which makes the shortcut hint in the GUI ambiguous.
+  if (platform === 'darwin' && ['screen', 'virtual-display', 'control-only', 'otg'].includes(config.scene) &&
+      config.shortcutModifier === 'default' &&
+      !details.some((detail) => detail.optionKey === 'shortcutModifier')) {
+    details.push({ arg: '--shortcut-mod=lsuper', optionKey: 'shortcutModifier', helpKey: 'shortcutModifier',
+      source, sourceLabel: source === 'profile' ? sourceLabel : undefined })
+  }
   const expert = analyzeExpertArgs(config.extraArgs)
   details.push(...expert.args.map((arg) => ({ arg, optionKey: 'expertArgs', helpKey: 'extraArgs', source: 'expert' as const })))
   return { args: details.map((detail) => detail.arg), details, warnings: expert.warnings }
@@ -122,8 +131,9 @@ export function prepareLaunchConfig(config: LaunchConfig, serial: string, now = 
   if (!config.recordDirectory.trim()) throw new Error('Choose a recording folder for automatic filenames.')
   const safeSerial = serial.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 80) || 'device'
   const timestamp = now.toISOString().replaceAll(':', '-').slice(0, 19)
+  const suffix = config.scene === 'record-only' ? `-${randomUUID()}` : ''
   const extension = config.recordFormat === 'default' ? 'mp4' : config.recordFormat
-  return { ...config, recordPath: join(config.recordDirectory.trim(), `scrcpy-${safeSerial}-${timestamp}.${extension}`) }
+  return { ...config, recordPath: join(config.recordDirectory.trim(), `scrcpy-${safeSerial}-${timestamp}${suffix}.${extension}`) }
 }
 
 export function buildScrcpyArgs(config: LaunchConfig, serial: string): string[] {

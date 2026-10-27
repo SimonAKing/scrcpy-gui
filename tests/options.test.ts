@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { basename, dirname, join } from 'node:path'
 import type { LaunchConfig } from '../src/shared/types'
-import { defaultLaunchConfig } from '../src/shared/config'
+import { backgroundRecordingLaunch, defaultLaunchConfig, defaultPersistedConfig, launchForDevice } from '../src/shared/config'
 import { analyzeExpertArgs, OPTION_DESCRIPTORS, serializeLaunchOptions } from '../src/shared/options'
 import { buildScrcpyArgDetails, prepareLaunchConfig } from '../src/main/scrcpy'
 import { SCENE_KINDS } from '../src/shared/scenes'
@@ -88,6 +89,45 @@ describe('expert argument policy', () => {
 })
 
 describe('command provenance', () => {
+  it('keeps assigned file-based recording profiles launchable without a recording folder', () => {
+    const config = defaultPersistedConfig('en')
+    const launch = { ...defaultLaunchConfig(), scene: 'record-only' as const, recordEnabled: true,
+      recordPath: '/recordings/profile.mkv', recordDirectory: '', recordFormat: 'mkv' as const }
+    config.profiles = [{ id: 'record', name: 'Recording', launch }]
+    config.deviceProfiles.PHONE = 'record'
+    const selected = launchForDevice(config, 'PHONE')
+    expect(selected).toEqual(launch)
+    expect(buildScrcpyArgDetails(prepareLaunchConfig(selected, 'PHONE'), 'PHONE').args)
+      .toContain('--record=/recordings/profile.mkv')
+    config.launch = { ...launch, recordPath: '/recordings/current.wav', recordFormat: 'default',
+      audioCodec: 'raw', recordVideo: false }
+    const folderRecording = launchForDevice(config, 'PHONE')
+    expect(folderRecording).toMatchObject({ autoRecordName: true, recordDirectory: '/recordings/', recordFormat: 'wav' })
+    expect(prepareLaunchConfig(folderRecording, 'PHONE').recordPath).toMatch(/\.wav$/)
+  })
+
+  it('restores a legacy recording folder without changing WAV/raw recording settings', () => {
+    const original = { ...defaultLaunchConfig(), scene: 'record-only' as const,
+      recordEnabled: true, recordPath: '/recordings/audio.wav', recordDirectory: '',
+      recordFormat: 'wav' as const, audioCodec: 'raw' as const, recordVideo: false }
+    const launch = backgroundRecordingLaunch(original)
+    const prepared = prepareLaunchConfig(launch, 'PHONE')
+    expect(dirname(prepared.recordPath)).toBe(join('/recordings'))
+    expect(basename(prepared.recordPath)).toMatch(/^scrcpy-PHONE-.*\.wav$/)
+    expect(buildScrcpyArgDetails(prepared, 'PHONE').args).toEqual(expect.arrayContaining([
+      '--record-format=wav', '--audio-codec=raw', '--no-video'
+    ]))
+    expect(original.autoRecordName).toBe(false)
+    expect(original.recordDirectory).toBe('')
+  })
+
+  it('keeps an explicitly selected modifier instead of adding the macOS Command default', () => {
+    const config = defaultLaunchConfig()
+    config.shortcutModifier = 'lalt'
+    expect(buildScrcpyArgDetails(config, 'ABC').args.filter((arg) => arg.startsWith('--shortcut-mod=')))
+      .toEqual(['--shortcut-mod=lalt'])
+  })
+
   it('labels session, profile, device override and expert sources per argv token', () => {
     const config = defaultLaunchConfig()
     config.windowTitle = 'Lab phone'
@@ -98,9 +138,26 @@ describe('command provenance', () => {
       { arg: '--serial=ABC', source: 'session' },
       { arg: '--window-title=Lab phone', source: 'device-override' },
       { arg: '--max-fps=60', source: 'profile', sourceLabel: 'Gaming' },
+      ...(process.platform === 'darwin' ? [{ arg: '--shortcut-mod=lsuper', source: 'profile', sourceLabel: 'Gaming' }] : []),
       { arg: '--power-off-on-close', source: 'expert' }
     ])
     expect(preview.warnings).toHaveLength(1)
+  })
+
+  it('gives background recordings distinct MP4 paths even when started at the same time', () => {
+    const config = { ...defaultLaunchConfig(), scene: 'record-only' as const,
+      recordEnabled: true, autoRecordName: true, recordFormat: 'mp4' as const,
+      recordDirectory: '/tmp/recordings with spaces' }
+    const now = new Date('2026-10-27T03:00:00Z')
+    const first = prepareLaunchConfig(config, 'device:5555', now)
+    const second = prepareLaunchConfig(config, 'device:5555', now)
+    expect(dirname(first.recordPath)).toBe(join('/tmp/recordings with spaces'))
+    expect(basename(first.recordPath)).toMatch(/^scrcpy-device-5555-.*\.mp4$/)
+    expect(second.recordPath).not.toBe(first.recordPath)
+    expect(buildScrcpyArgDetails(first, 'device:5555').args).toEqual(expect.arrayContaining([
+      `--record=${first.recordPath}`, '--record-format=mp4', '--no-playback', '--no-window'
+    ]))
+    expect(() => prepareLaunchConfig({ ...config, recordDirectory: '  ' }, 'device')).toThrow(/folder/)
   })
 
   it('creates deterministic automatic recording names and marks their argv generated', () => {
