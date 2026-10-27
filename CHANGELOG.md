@@ -11,6 +11,7 @@
 
 ### Security
 
+- Update Electron to 43.8.3, Vite to 7.3.7, Vitest and its mocker to 4.1.12, fast-uri to 3.1.9, http-cache-semantics to 4.3.0, and Undici to 6.29.1 / 7.30.1 to resolve the dependency advisories reported during release review.
 - Require confirmation before installing APKs opened by macOS, default to cancellation, and disable app replacement unless explicitly selected. Wait for saved runtime configuration before handling cold-start APK events, bound the pending file queue, and keep device shortcuts out of other applications (#235).
 
 ### Fixed
@@ -20,7 +21,7 @@
 
 ### Changed
 
-- Update Electron to 43.5.0, Undici to 6.29.0 / 7.30.0, and brace-expansion to 1.1.21 / 2.1.7 / 5.0.12 (#224, #225, #227).
+- Update brace-expansion to 1.1.21 / 2.1.7 / 5.0.12 (#227).
 - Update Vue and its matching compiler/runtime packages to 3.5.44 and source-map-js to 1.2.2, including upstream server-renderer attribute validation and source-map offset validation fixes (#229, #230).
 - Document the community-maintained Flatpak build (#221) and the phased advanced automation proposal (#222).
 

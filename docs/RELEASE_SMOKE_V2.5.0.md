@@ -15,6 +15,7 @@ This release includes background recording controls, macOS device shortcuts, and
 - `npm test`: 226 tests across 27 files, including mocked main-process integration. No APK was installed and no Android device was accessed by these tests.
 - `npm run build`: Renderer and main-process type checks plus production builds.
 - `npm run icons:check`: generated icon consistency.
+- `npm audit`: 0 reported vulnerabilities after updating Electron, Vite, Vitest/mocker, fast-uri, http-cache-semantics, and both Undici versions. The final lockfile is verified with a clean `npm ci`.
 - `package.json`, the lockfile root package, and the Chocolatey manifest declare version 2.5.0.
 
 ## Release gates and limits
