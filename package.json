@@ -33,13 +33,13 @@
     "dist:linux": "npm run build && node scripts/fetch-scrcpy.mjs linux && electron-builder --linux --x64 --publish never"
   },
   "dependencies": {
-    "vue": "^3.5.41"
+    "vue": "^3.5.44"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^24.10.13",
     "@vitejs/plugin-vue": "^6.0.8",
-    "electron": "^43.4.0",
+    "electron": "^43.5.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "typescript": "^5.9.3",
@@ -80,6 +80,8 @@
     "asar": true,
     "mac": {
       "icon": "build/icons/icon.icns",
+      "identity": "-",
+      "hardenedRuntime": false,
       "category": "public.app-category.utilities",
       "fileAssociations": [
         {

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fixed
+
+- Explicitly ad-hoc sign macOS apps after packaging, fixing the invalid inherited Electron signature in Apple Silicon releases that could report the app as damaged (#228). Verify full application signatures in both macOS ZIP architectures before publishing. These builds remain unnotarized.
+- Open the required GitHub bug-report form from the app's issue helper, prefill environment fields and manual diagnostic attachment instructions, and require reproduction details and expected/actual behavior instead of offering a blank report body (#226).
+
+### Changed
+
+- Update Electron to 43.5.0, Undici to 6.29.0 / 7.30.0, and brace-expansion to 1.1.21 / 2.1.7 / 5.0.12 (#224, #225, #227).
+- Update Vue and its matching compiler/runtime packages to 3.5.44 and source-map-js to 1.2.2, including upstream server-renderer attribute validation and source-map offset validation fixes (#229, #230).
+- Document the community-maintained Flatpak build (#221) and the phased advanced automation proposal (#222).
+
 ## 2.4.5
 
 ### Fixed
