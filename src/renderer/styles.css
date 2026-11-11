@@ -34,6 +34,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 
 .runtime-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px 18px; padding: 18px; border: 1px solid #e3e6e9; border-radius: 13px; background: #fff; box-shadow: 0 3px 14px #20242a0a; }
 .runtime-copy { min-width: 0; }.runtime-card p { margin: 0; }.runtime-actions { justify-self: end; white-space: nowrap; }
+.runtime-update { grid-column: 1 / -1; display: grid; gap: 8px; }.runtime-update .muted { font-size: 12px; }
 .runtime-statuses { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-top: 13px; border-top: 1px solid #eceef1; }
 .runtime-status { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; padding: 0 11px; border: 1px solid #e2e6e4; border-radius: 8px; background: #f7faf8; }
 .runtime-status-name { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; color: #565d63; font-size: 11px; font-weight: 720; }.runtime-status-name i { width: 7px; height: 7px; border-radius: 50%; background: #3fa979; box-shadow: 0 0 0 3px #3fa97918; }

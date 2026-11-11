@@ -559,6 +559,11 @@ export interface ConfigSaveResult {
   revision: number
 }
 
+export interface RuntimeUpdateInfo {
+  version: string
+  available: boolean
+}
+
 export interface EnvironmentStatus {
   scrcpy: {
     ok: boolean
@@ -674,6 +679,9 @@ export interface ScrcpyApi {
   loadConfig(legacyJson: string, locale: Locale): Promise<ConfigLoadResult>
   saveConfig(revision: number, config: PersistedConfig): Promise<OperationResult<ConfigSaveResult>>
   getEnvironment(runtime: RuntimeConfig): Promise<EnvironmentStatus>
+  checkRuntimeUpdate(): Promise<OperationResult<RuntimeUpdateInfo>>
+  installRuntimeUpdate(): Promise<OperationResult>
+  restoreBundledRuntime(): Promise<OperationResult>
   listDevices(runtime: RuntimeConfig): Promise<OperationResult<Device[]>>
   trackDevices(runtime: RuntimeConfig): Promise<OperationResult<Device[]>>
   setDeviceTrackerVisibility(visible: boolean): Promise<void>

@@ -25,6 +25,7 @@ import type {
   DeviceOverview,
   DeviceTrackerEvent,
   EnvironmentStatus,
+  RuntimeUpdateInfo,
   DiagnosticPreview,
   FileConflictPolicy,
   FileTransferResult,
@@ -117,6 +118,10 @@ const preparingDiagnostics = ref(false)
 const diagnosticArtifact = ref<ArtifactRecord | null>(null)
 const activeSerials = ref(new Set<string>())
 const loadingEnvironment = ref(false)
+const runtimeUpdateBusy = ref(false)
+const runtimeUpdate = ref<RuntimeUpdateInfo | null>(null)
+const runtimeUpdateError = ref('')
+const runtimeUpdateMessage = ref('')
 const loadingDevices = ref(false)
 const wirelessTarget = ref(config.wirelessTargets[0]?.address || '')
 const pairTarget = ref('')
@@ -396,9 +401,46 @@ async function chooseScrcpy(): Promise<void> {
   const path = await window.scrcpy.chooseScrcpy()
   if (!path) return
   config.runtime.scrcpyPath = path
+  runtimeUpdate.value = null
   await refreshEnvironment(true)
   await refreshDevices()
   await startTrackingDevices()
+}
+
+async function checkRuntimeUpdate(): Promise<void> {
+  runtimeUpdateBusy.value = true
+  runtimeUpdate.value = null
+  runtimeUpdateError.value = ''
+  runtimeUpdateMessage.value = ''
+  try {
+    const result = await window.scrcpy.checkRuntimeUpdate()
+    if (!result.ok || !result.data) throw new Error(result.error?.detail || operationErrorMessage(result, t('runtimeUpdateFailed')))
+    runtimeUpdate.value = result.data
+  } catch (error) {
+    runtimeUpdateError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    runtimeUpdateBusy.value = false
+  }
+}
+
+async function switchRuntime(restore = false): Promise<void> {
+  runtimeUpdateBusy.value = true
+  runtimeUpdateError.value = ''
+  runtimeUpdateMessage.value = ''
+  try {
+    const result = restore ? await window.scrcpy.restoreBundledRuntime() : await window.scrcpy.installRuntimeUpdate()
+    if (!result.ok) throw new Error(result.error?.detail || operationErrorMessage(result, t('runtimeUpdateFailed')))
+    if (restore) config.runtime.scrcpyPath = ''
+    runtimeUpdate.value = null
+    runtimeUpdateMessage.value = t(restore ? 'runtimeRestored' : 'runtimeUpdated')
+    await refreshEnvironment()
+    await refreshDevices()
+    await startTrackingDevices()
+  } catch (error) {
+    runtimeUpdateError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    runtimeUpdateBusy.value = false
+  }
 }
 
 async function refreshDevices(notifyError = false): Promise<void> {
@@ -1541,8 +1583,19 @@ onBeforeUnmount(() => {
           <p class="muted">{{ t('runtimeHint') }}</p>
         </div>
         <div class="runtime-actions button-row nowrap">
-          <button class="secondary compact" @click="chooseScrcpy">{{ t('chooseScrcpy') }}</button>
+          <button class="secondary compact" :disabled="runtimeUpdateBusy" @click="chooseScrcpy">{{ t('chooseScrcpy') }}</button>
           <button class="ghost compact" :disabled="loadingEnvironment" @click="refreshEnvironment(true)">{{ t('recheck') }}</button>
+        </div>
+        <div class="runtime-update">
+          <div class="button-row">
+            <button class="secondary compact" :disabled="runtimeUpdateBusy || !!config.runtime.scrcpyPath" @click="checkRuntimeUpdate">{{ t(runtimeUpdateBusy ? 'runtimeUpdating' : 'checkRuntimeUpdate') }}</button>
+            <button v-if="runtimeUpdate?.available" class="primary compact" :disabled="runtimeUpdateBusy || !!config.runtime.scrcpyPath" @click="switchRuntime()">{{ t('installRuntimeUpdate') }} {{ runtimeUpdate.version }}</button>
+            <button class="ghost compact" :disabled="runtimeUpdateBusy" @click="switchRuntime(true)">{{ t('restoreBundledRuntime') }}</button>
+            <span v-if="runtimeUpdate && !runtimeUpdate.available" class="muted">{{ t('runtimeUpToDate') }} ({{ runtimeUpdate.version }})</span>
+          </div>
+          <p class="muted">{{ t(config.runtime.scrcpyPath ? 'runtimeCustomUpdateHint' : 'runtimeUpdateHint') }}</p>
+          <p v-if="runtimeUpdateError" class="inline-warning" role="alert">{{ runtimeUpdateError }}</p>
+          <p v-if="runtimeUpdateMessage" role="status">{{ runtimeUpdateMessage }}</p>
         </div>
         <div class="runtime-statuses">
           <div :class="['runtime-status', environment?.scrcpy.ok ? 'ok' : 'bad']">

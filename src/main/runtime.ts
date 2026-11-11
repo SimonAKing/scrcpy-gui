@@ -17,6 +17,12 @@ export class CommandExecutionError extends Error {
   }
 }
 
+let managedRuntimeDirectory = ''
+
+export function setManagedRuntimeDirectory(directory: string): void {
+  managedRuntimeDirectory = directory
+}
+
 function executableName(binary: 'scrcpy' | 'adb'): string {
   return process.platform === 'win32' ? `${binary}.exe` : binary
 }
@@ -42,6 +48,7 @@ export async function resolveBinary(runtime: RuntimeConfig, binary: 'scrcpy' | '
     else candidates.push(join(dirname(configured), name))
   }
 
+  if (managedRuntimeDirectory) candidates.push(join(managedRuntimeDirectory, name))
   if (process.resourcesPath) candidates.push(join(process.resourcesPath, 'scrcpy', name))
   const pathFolders = (process.env.PATH || process.env.Path || '').split(delimiter).filter(Boolean)
   if (process.platform === 'darwin') pathFolders.push('/opt/homebrew/bin', '/usr/local/bin', '/opt/local/bin')

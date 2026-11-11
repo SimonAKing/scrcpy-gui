@@ -74,6 +74,7 @@ import { readBoundedRegularUtf8File } from './safeFile'
 import { buildIssueHelperUrl } from './issueHelper'
 import { installOpenedApk } from './openApk'
 import { deviceShortcut } from './deviceShortcuts'
+import { RuntimeUpdater } from './runtimeUpdater'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -86,6 +87,7 @@ let shutdownPromise: Promise<void> | null = null
 let shutdownFinished = false
 let configRepository: ConfigRepository | undefined
 let artifactService: ArtifactService | undefined
+let runtimeUpdater: RuntimeUpdater | undefined
 let diagnosticDraft: { runtimeKey: string; createdAt: number; prepared: PreparedDiagnostics } | undefined
 let lastDiagnosticScrcpyVersion = ''
 const eventStore = new EventStore()
@@ -868,6 +870,35 @@ handle('batch:cancel', (_event, runId: string) =>
   batchAutomationService.cancel(boundedString(runId, 'batch run id', 128))
 )
 handle('system:environment', (_event, runtime: RuntimeConfig) => getEnvironment(runtimeConfig(runtime)))
+handle('runtime:check-update', async () => {
+  try {
+    if (!runtimeUpdater) throw new Error('Runtime updater is not ready.')
+    return { ok: true, data: await runtimeUpdater.check() }
+  } catch (error) {
+    return failureFromUnknown(error, 'RUNTIME_UPDATE_CHECK_FAILED', 'runtime-update', 'Unable to check for runtime updates.', { retryable: true })
+  }
+})
+handle('runtime:install-update', async () => {
+  try {
+    if (!runtimeUpdater) throw new Error('Runtime updater is not ready.')
+    if (configRepository?.snapshot()?.runtime.scrcpyPath) throw new Error('Switch to the bundled runtime before updating.')
+    await runtimeUpdater.install()
+    stopDeviceTracker()
+    return { ok: true }
+  } catch (error) {
+    return failureFromUnknown(error, 'RUNTIME_UPDATE_FAILED', 'runtime-update', 'Unable to update the runtime.', { retryable: true })
+  }
+})
+handle('runtime:restore-bundled', async () => {
+  try {
+    if (!runtimeUpdater) throw new Error('Runtime updater is not ready.')
+    await runtimeUpdater.restoreBundled()
+    stopDeviceTracker()
+    return { ok: true }
+  } catch (error) {
+    return failureFromUnknown(error, 'RUNTIME_RESTORE_FAILED', 'runtime-update', 'Unable to restore the bundled runtime.', { retryable: true })
+  }
+})
 handle('capability:device-probe', async (_event, runtime: RuntimeConfig, serial: string, refresh = false) => {
   try {
     return {
@@ -1125,9 +1156,16 @@ handle('shell:open', async (_event, rawUrl: string) => {
   await shell.openExternal(url.toString())
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   configRepository = new ConfigRepository(app.getPath('userData'))
   artifactService = new ArtifactService(app.getPath('userData'))
+  runtimeUpdater = new RuntimeUpdater(app.getPath('userData'), () => {
+    if (isQuitting) throw new Error('The application is shutting down.')
+    if (listScrcpySessions().some((session) => !['stopped', 'failed'].includes(session.state))) {
+      throw new Error('Stop all scrcpy sessions before switching runtimes.')
+    }
+  })
+  await runtimeUpdater.initialize()
   configureSessionSecurity()
   createWindow()
   createTray()

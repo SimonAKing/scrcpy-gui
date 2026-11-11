@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Add in-app checks and updates for the latest stable official scrcpy bundle and its included adb, with platform-specific downloads, SHA-256 verification, persistent runtime selection, and a switch back to the original bundled version (#236, thanks @lorypelli).
+
 ## 2.5.0
 
 ### Added

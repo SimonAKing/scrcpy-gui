@@ -2,7 +2,7 @@
   <img width="96" height="96" src="build/icons/256x256.png" alt="Scrcpy GUI">
   <h1>Scrcpy GUI</h1>
   <p><strong>A simple, modern desktop interface for scrcpy</strong></p>
-  <p>Built with ❤ by <a href="https://github.com/SimonAKing">Simon Ma</a> · <a href="README.zh_CN.md">简体中文</a></p>
+  <p><a href="README.zh_CN.md">简体中文</a></p>
 </div>
 
 <p align="center">
@@ -13,9 +13,7 @@
   <a href="https://github.com/SimonAKing/scrcpy-gui/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat-square" alt="Contributions welcome"></a>
 </p>
 
-Scrcpy GUI discovers Android devices over USB or wireless debugging and launches [scrcpy](https://github.com/Genymobile/scrcpy) with a reliable, visual configuration. It supports several devices at once, recording, audio, modern keyboard modes, cropping, window placement, and the current scrcpy 4.x command line.
-
-> Version 2.4 is the first stable release of the ground-up modernization. When reporting a regression, please include the Logs tab output, your operating system, and your scrcpy version.
+Scrcpy GUI discovers Android devices over USB or wireless debugging and launches [scrcpy](https://github.com/Genymobile/scrcpy) with a reliable, visual configuration. It supports several devices at once, recording, audio, modern keyboard modes, cropping, window placement, and scrcpy command-line options.
 
 ## Interface
 
@@ -38,7 +36,7 @@ Scrcpy is a fast, lightweight application maintained by Genymobile. It mirrors a
 
 - Native scrcpy performance, image quality, audio, keyboard, mouse, clipboard, drag-and-drop, and recording
 - Automatic USB discovery and clear unauthorized/offline device states
-- Verified official scrcpy 4.1 and adb bundled with release packages; no PATH setup required
+- Verified official scrcpy and adb bundled with release packages; no PATH setup required
 - Android 11+ wireless pairing with `adb pair`, plus direct TCP/IP connection for legacy setups
 - Simultaneous multi-device launch with duplicate-process protection
 - Named profiles, per-device configuration and aliases, saved wireless addresses, and opt-in automatic launch
@@ -52,15 +50,11 @@ Scrcpy is a fast, lightweight application maintained by Genymobile. It mirrors a
 - Sandboxed Electron renderer, context isolation, restricted IPC, and argument-safe process launching
 - Automated validation and release builds for Windows, macOS, and Linux
 
-## Version 2 compared with 1.5
-
-The 2.0 line replaces the original 2018 Electron/Vue stack and its scrcpy 1.x flags. It includes a new interface, current scrcpy arguments, direct process supervision, Android 11+ pairing, multi-device reliability, diagnostics, security hardening, automated tests, and cross-platform release automation. Existing 1.x configuration is intentionally not imported because several old options no longer have the same scrcpy meaning.
-
 ## Requirements
 
 1. Android 5.0 (API 21) or later. Audio forwarding requires the Android version supported by scrcpy.
 2. Enable **Developer options → USB debugging** on the device. Some vendors expose an additional security option for keyboard and mouse control.
-3. Use the verified scrcpy 4.1 and `adb` bundled in official Scrcpy GUI release packages, or select your own compatible scrcpy 4.x executable.
+3. Use the verified scrcpy and `adb` bundled in official Scrcpy GUI release packages, or select your own compatible scrcpy executable (4.0 or later).
 
 Release packages work without configuring `PATH`. If you choose another `scrcpy` executable, Scrcpy GUI also searches its directory, `PATH`, common Homebrew locations, and standard Android SDK locations for `adb`.
 
@@ -72,19 +66,23 @@ Download the package for your platform from [GitHub Releases](https://github.com
 - **macOS:** Intel or Apple Silicon `.dmg` / `.zip`
 - **Linux:** `.AppImage`, Debian (`.deb`), Arch (`.pacman`), or portable `.tar.gz`
 
-macOS builds now receive an ad-hoc signature for application integrity, including on Apple Silicon. They are not Developer ID signed or notarized; Windows builds are also unsigned. Your operating system may ask you to confirm that you trust the downloaded application. Verify the download against the release `SHA256SUMS.txt` before opening it.
+macOS builds receive an ad-hoc signature for application integrity, including on Apple Silicon. They are not Developer ID signed or notarized; Windows builds are also unsigned. Your operating system may ask you to confirm that you trust the downloaded application. Verify the download against the release `SHA256SUMS.txt` before opening it.
 
-If macOS reports that an older Apple Silicon build is **damaged**, download a release containing the #228 signing fix. After verifying the download and moving **Scrcpy GUI.app** to **Applications**, use **System Settings → Privacy & Security → Open Anyway** if macOS blocks an unidentified developer. See [Apple's instructions](https://support.apple.com/en-us/102445). A valid ad-hoc signature does not replace Apple's notarization or remove Gatekeeper checks.
+After verifying the download and moving **Scrcpy GUI.app** to **Applications**, use **System Settings → Privacy & Security → Open Anyway** if macOS blocks an unidentified developer. See [Apple's instructions](https://support.apple.com/en-us/102445). A valid ad-hoc signature does not replace Apple's notarization or remove Gatekeeper checks.
 
 The macOS app declares `.apk` as an openable file type. Double-clicking an APK in Finder asks you to confirm the file and authorized target device before installing. Replacing an existing app requires a separate checkbox; cancellation is the default. With multiple authorized devices, choose a target first. If another app is already the default for APKs, select Scrcpy GUI in Finder's **Get Info → Open with** and click **Change All**.
 
-Releases from v2.4.1 also include an SPDX SBOM and GitHub build-provenance attestations. After downloading an asset, verify its workflow identity with `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` in addition to checking the SHA-256 manifest.
-
-The exact automated checks, SBOM/provenance evidence, and unverified hardware matrix are recorded in the [v2.4.1 release smoke report](docs/RELEASE_SMOKE_V2.4.1.md). The earlier three-platform install/upgrade/uninstall evidence remains in the [v2.4.0 report](docs/RELEASE_SMOKE_V2.4.0.md).
+Releases include an SPDX SBOM and GitHub build-provenance attestations. After downloading an asset, verify its workflow identity with `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` in addition to checking the SHA-256 manifest.
 
 ### Community Flatpak build
 
 Linux users can find a community-maintained Flatpak manifest and build instructions in [outusuke/io.github.simonaking.ScrcpyGui](https://github.com/outusuke/io.github.simonaking.ScrcpyGui), contributed in [#221](https://github.com/SimonAKing/scrcpy-gui/issues/221). It is maintained separately from the release packages above. Packaging-specific reports belong in that repository.
+
+### Update scrcpy and adb
+
+In **Devices → Runtime setup**, select **Check for runtime updates**, then install the offered version. Scrcpy GUI downloads the latest stable official scrcpy bundle for your platform, checks its SHA-256 digest, and verifies scrcpy and the included adb before switching. The adb version is the one shipped with that scrcpy release. Stop active sessions before updating.
+
+Updates are stored in your user data directory. The original app bundle is preserved; select **Use original bundled runtime** to return to it. Failed downloads or verification leave the current runtime selected. A custom installation must be switched back to the bundled runtime before using in-app updates.
 
 ### Use another scrcpy installation
 
@@ -96,7 +94,7 @@ On macOS with Homebrew:
 brew install scrcpy android-platform-tools
 ```
 
-On Linux, use a current package from your distribution or follow the official [scrcpy Linux documentation](https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md). Distribution packages may lag behind; Scrcpy GUI 2.0 requires scrcpy 4.x.
+On Linux, use a current package from your distribution or follow the official [scrcpy Linux documentation](https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md). Distribution packages may lag behind; Scrcpy GUI requires scrcpy 4.0 or later.
 
 ## Use
 
@@ -219,8 +217,8 @@ The proposed product direction, functional requirements, architecture, security 
 
 ## Support the project
 
-If Scrcpy GUI is useful to you, starring the repository, reporting a reproducible issue, improving documentation, or contributing a pull request all help the project. You can also support the original author through [PayPal](https://paypal.me/tomotoes).
+If Scrcpy GUI is useful to you, starring the repository, reporting a reproducible issue, improving documentation, or contributing a pull request all help the project.
 
 ## License
 
-Scrcpy GUI releases from v2.4.2 onward are licensed under the [MIT License](LICENSE). Tagged releases through v2.4.1 remain available under the GPL-3.0-only license that accompanied them. Bundled scrcpy remains a separate project under its own license; see [third-party notices](THIRD_PARTY_NOTICES.md).
+Scrcpy GUI is licensed under the [MIT License](LICENSE). Bundled scrcpy remains a separate project under its own license; see [third-party notices](THIRD_PARTY_NOTICES.md).

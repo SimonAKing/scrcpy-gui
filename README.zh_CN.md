@@ -2,7 +2,7 @@
   <img width="96" height="96" src="build/icons/256x256.png" alt="Scrcpy GUI">
   <h1>Scrcpy GUI</h1>
   <p><strong>一个简洁、现代的 scrcpy 桌面图形界面</strong></p>
-  <p>由 <a href="https://github.com/SimonAKing">Simon Ma</a> 用 ❤ 构建 · <a href="README.md">English</a></p>
+  <p><a href="README.md">English</a></p>
 </div>
 
 <p align="center">
@@ -13,9 +13,7 @@
   <a href="https://github.com/SimonAKing/scrcpy-gui/issues"><img src="https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat-square" alt="欢迎贡献"></a>
 </p>
 
-Scrcpy GUI 可以发现通过 USB 或无线调试连接的 Android 设备，并通过可靠的图形配置启动 [scrcpy](https://github.com/Genymobile/scrcpy)。它支持同时投屏多台设备、录制、音频、现代键盘模式、画面裁剪、窗口布局和当前 scrcpy 4.x 命令行参数。
-
-> 2.4 是从底层重建后的首个正式稳定版。反馈回归问题时，请附上「日志」页内容、操作系统和 scrcpy 版本。
+Scrcpy GUI 可以发现通过 USB 或无线调试连接的 Android 设备，并通过可靠的图形配置启动 [scrcpy](https://github.com/Genymobile/scrcpy)。它支持同时投屏多台设备、录制、音频、现代键盘模式、画面裁剪、窗口布局和 scrcpy 命令行参数。
 
 ## 界面
 
@@ -38,7 +36,7 @@ scrcpy 是 Genymobile 维护的高性能轻量工具。它可以通过 USB 或 T
 
 - 继承 scrcpy 的原生性能、画质、音频、键鼠控制、剪贴板、拖放传输和录制能力
 - 自动发现 USB 设备，清晰显示未授权、离线等真实状态
-- 发布包内置经过校验的官方 scrcpy 4.1 与 adb，无需配置 PATH
+- 发布包内置经过校验的官方 scrcpy 与 adb，无需配置 PATH
 - 支持 Android 11+ 的 `adb pair` 无线配对，也支持传统 TCP/IP 直连
 - 同时启动多台设备，并防止同一设备被重复打开
 - 支持命名配置、每设备独立设置与别名、保存无线地址以及按需自动启动
@@ -52,15 +50,11 @@ scrcpy 是 Genymobile 维护的高性能轻量工具。它可以通过 USB 或 T
 - Electron Renderer 沙箱、context isolation、受限 IPC，不通过 shell 拼接并执行参数
 - Windows、macOS、Linux 自动验证与发布构建
 
-## 2.0 与 1.5 的区别
-
-2.0 替换了 2018 年的 Electron/Vue 技术栈和 scrcpy 1.x 参数体系，重新实现了界面、当前 scrcpy 参数、进程状态管理、Android 11+ 配对、多设备可靠性、问题日志、安全边界、自动测试和跨平台发布。旧版的部分参数含义已经变化，因此 1.x 配置不会被自动导入。
-
 ## 使用要求
 
 1. Android 5.0（API 21）或更高版本；音频转发还需满足 scrcpy 对 Android 版本的要求。
 2. 在手机的「开发者选项」中开启「USB 调试」。部分厂商还要求开启额外的安全/键鼠控制选项。
-3. 官方 Scrcpy GUI 发布包已经内置经 SHA-256 校验的 scrcpy 4.1 与 `adb`；也可以手动选择其他兼容的 scrcpy 4.x 可执行文件。
+3. 官方 Scrcpy GUI 发布包已经内置经 SHA-256 校验的 scrcpy 与 `adb`；也可以手动选择其他兼容的 scrcpy 可执行文件（4.0 或更高版本）。
 
 发布包无需配置 `PATH` 即可使用。如果手动选择其他 `scrcpy`，Scrcpy GUI 还会在该程序同目录、系统 `PATH`、常见 Homebrew 目录以及标准 Android SDK 目录中查找 `adb`。
 
@@ -72,19 +66,23 @@ scrcpy 是 Genymobile 维护的高性能轻量工具。它可以通过 USB 或 T
 - **macOS：**Intel 或 Apple 芯片版本的 `.dmg` / `.zip`
 - **Linux：**`.AppImage`、Debian（`.deb`）、Arch（`.pacman`）或免安装 `.tar.gz`
 
-macOS 构建现会生成用于应用完整性校验的临时签名（ad-hoc），包括 Apple 芯片版本；尚未使用 Developer ID 签名或通过 Apple 公证，Windows 构建也尚未签名。操作系统可能会要求你确认信任该应用。打开前请使用 Release 中的 `SHA256SUMS.txt` 校验下载文件。
+macOS 构建会生成用于应用完整性校验的临时签名（ad-hoc），包括 Apple 芯片版本；尚未使用 Developer ID 签名或通过 Apple 公证，Windows 构建也尚未签名。操作系统可能会要求你确认信任该应用。打开前请使用 Release 中的 `SHA256SUMS.txt` 校验下载文件。
 
-如果旧版 Apple 芯片构建提示**应用已损坏**，请下载包含 #228 签名修复的版本。校验下载文件、将 **Scrcpy GUI.app** 移到**应用程序**后，如果 macOS 因开发者身份不明而阻止打开，可按 [Apple 的说明](https://support.apple.com/zh-cn/102445)，在**系统设置 → 隐私与安全性 → 仍要打开**中确认。临时签名不等于 Apple 公证，也不会取消 Gatekeeper 检查。
+校验下载文件、将 **Scrcpy GUI.app** 移到**应用程序**后，如果 macOS 因开发者身份不明而阻止打开，可按 [Apple 的说明](https://support.apple.com/zh-cn/102445)，在**系统设置 → 隐私与安全性 → 仍要打开**中确认。临时签名不等于 Apple 公证，也不会取消 Gatekeeper 检查。
 
 macOS 应用声明可打开 `.apk`。在 Finder 双击 APK 时，Scrcpy GUI 会先确认文件和已授权目标设备，再执行安装；默认取消，覆盖现有应用需要单独勾选。多台设备在线时会先让你选择目标。若 macOS 已把 APK 关联到其他程序，在 Finder 的「显示简介 → 打开方式」中选择 Scrcpy GUI 并点击「全部更改」。
 
-从 v2.4.1 起，Release 还会附带 SPDX SBOM 和 GitHub 构建来源证明。下载资产后，除核对 SHA-256 清单外，还可运行 `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` 验证其工作流来源。
-
-本次实际执行的自动检查、SBOM/来源证明和尚未验证的硬件矩阵，记录在 [v2.4.1 Release smoke 报告](docs/RELEASE_SMOKE_V2.4.1.md)中。此前三平台安装、升级和卸载证据仍保留在 [v2.4.0 报告](docs/RELEASE_SMOKE_V2.4.0.md)中。
+Release 会附带 SPDX SBOM 和 GitHub 构建来源证明。下载资产后，除核对 SHA-256 清单外，还可运行 `gh attestation verify PATH/TO/ASSET -R SimonAKing/scrcpy-gui` 验证其工作流来源。
 
 ### 社区 Flatpak 构建
 
 Linux 用户可在 [outusuke/io.github.simonaking.ScrcpyGui](https://github.com/outusuke/io.github.simonaking.ScrcpyGui) 查看社区维护的 Flatpak 清单和构建说明，由 [#221](https://github.com/SimonAKing/scrcpy-gui/issues/221) 提供。该项目与上述发布包分开维护，打包相关问题请在该仓库反馈。
+
+### 更新 scrcpy 与 adb
+
+在「设备 → 运行环境」中点击「检查运行环境更新」，再安装检测到的新版本。Scrcpy GUI 会下载适合当前系统与架构的官方最新稳定版完整包，校验 SHA-256，并验证 scrcpy 与随包提供的 adb 后再切换。adb 的版本取决于该次 scrcpy 官方发布包。更新前请先停止活动会话。
+
+更新存放在用户数据目录，原始内置版本会保留，随时可以点击「使用原始内置版本」切回。下载或验证失败时仍使用当前版本。使用自定义安装时，需要先切回内置版本才能在应用内更新。
 
 ### 使用其他 scrcpy 安装
 
@@ -96,7 +94,7 @@ macOS 可通过 Homebrew 安装：
 brew install scrcpy android-platform-tools
 ```
 
-Linux 用户可使用发行版中的新版本软件包，或参考 scrcpy 官方 [Linux 文档](https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md)。部分发行版的软件包更新较慢；Scrcpy GUI 2.0 要求 scrcpy 4.x。
+Linux 用户可使用发行版中的新版本软件包，或参考 scrcpy 官方 [Linux 文档](https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md)。部分发行版的软件包更新较慢；Scrcpy GUI 要求 scrcpy 4.0 或更高版本。
 
 ## 使用方法
 
@@ -217,8 +215,8 @@ npm run build:dir
 
 ## 支持项目
 
-如果 Scrcpy GUI 对你有帮助，欢迎 Star、提交可复现的问题、完善文档或贡献 PR。也可以通过 [PayPal](https://paypal.me/tomotoes) 支持原作者。
+如果 Scrcpy GUI 对你有帮助，欢迎 Star、提交可复现的问题、完善文档或贡献 PR。
 
 ## 许可证
 
-Scrcpy GUI 自 v2.4.2 起使用 [MIT License](LICENSE)。v2.4.1 及更早的已发布版本继续遵循其发布时附带的 GPL-3.0-only 许可。内置 scrcpy 仍是遵循其自身许可证的独立项目，详见[第三方声明](THIRD_PARTY_NOTICES.md)。
+Scrcpy GUI 使用 [MIT License](LICENSE)。内置 scrcpy 仍是遵循其自身许可证的独立项目，详见[第三方声明](THIRD_PARTY_NOTICES.md)。
